@@ -134,7 +134,18 @@ async def test_integrate_blackbox(ops_test: OpsTest):
     )
 
     await ops_test.model.integrate(
-        f"{APP_NAME}",
+        f"{APP_NAME}:probes",
+        "blackbox:probes",
+    )
+
+    logger.info(
+        "Adding relation: %s:%s",
+        APP_NAME,
+        "probes-devices",
+    )
+
+    await ops_test.model.integrate(
+        f"{APP_NAME}:probes-devices",
         "blackbox:probes",
     )
 
@@ -155,3 +166,13 @@ async def test_blackbox(ops_test: OpsTest):
 
     assert relation_data.get("scrape_metadata")
     assert relation_data.get("scrape_probes")
+
+
+async def test_blackbox_devices(ops_test: OpsTest):
+    """Test probes devices are defined in relation data bag."""
+    app = ops_test.model.applications[APP_NAME]
+
+    relation_data = await _get_app_relation_data(app, "probes-devices", side=PROVIDES)
+
+    # no devices registered when testing
+    assert relation_data == []

@@ -57,7 +57,11 @@ provides:
   probes:
     interface: blackbox_exporter_probes
     description: |
-      Send over to blackbox exporter the endpoints we want it to probe.
+      Send over to blackbox exporter the app endpoints we want it to probe.
+  probes-devices:
+    interface: blackbox_exporter_probes
+    description: |
+      Send over to blackbox exporter the device endpoints we want it to probe.
 
 actions:
   get-admin-password:

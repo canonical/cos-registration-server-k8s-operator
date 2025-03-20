@@ -144,12 +144,23 @@ class CosRegistrationServerCharm(CharmBase):
 
         self.blackbox_probes_provider = BlackboxProbesProvider(
             charm=self,
-            probes=self.self_probe + self.devices_ip_endpoints_probes,
+            probes=self.self_probe,
             refresh_event=[
                 self.on.update_status,
                 self.ingress.on.ready,
                 self.on.config_changed,
             ],
+        )
+
+        self.blackbox_probes_provider_devices = BlackboxProbesProvider(
+            charm=self,
+            probes=self.devices_ip_endpoints_probes,
+            refresh_event=[
+                self.on.update_status,
+                self.ingress.on.ready,
+                self.on.config_changed,
+            ],
+            relation_name="probes-devices",
         )
 
         self.log_forwarder = LogForwarder(self)
@@ -314,6 +325,7 @@ class CosRegistrationServerCharm(CharmBase):
 
     def _on_collect_status(self, event: CollectStatusEvent):
         event.add_status(self.blackbox_probes_provider.get_status())
+        event.add_status(self.blackbox_probes_provider_devices.get_status())
 
     @property
     def _scheme(self) -> str:

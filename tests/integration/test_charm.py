@@ -258,4 +258,4 @@ async def test_blackbox_devices(ops_test: OpsTest):
     relation_data = await _get_app_relation_data(app, "probes-devices", side=PROVIDES)
 
     # no devices registered when testing
-    assert relation_data == []
+    assert relation_data.get("scrape_probes") == []

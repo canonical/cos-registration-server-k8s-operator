@@ -192,7 +192,8 @@ class CosRegistrationServerCharm(CharmBase):
         )
         # hack because PrometheusRemoteWriteConsumer doesn't
         # have the option to skip topology injection
-        self.prometheus_alerts_remote_write_consumer_devices.topology = None
+        # GH Issue (https://github.com/canonical/prometheus-k8s-operator/issues/688)
+        self.prometheus_alerts_remote_write_consumer_devices.topology = None  # pyright: ignore
 
         self.tracing_endpoint_requirer = TracingEndpointRequirer(self)
 

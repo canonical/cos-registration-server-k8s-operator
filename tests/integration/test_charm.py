@@ -260,6 +260,7 @@ async def test_integrate_blackbox_devices(ops_test: OpsTest):
         status="active",
     )
 
+
 async def test_blackbox_devices(ops_test: OpsTest):
     """Test probes devices are defined in relation data bag."""
     app = ops_test.model.applications[APP_NAME]

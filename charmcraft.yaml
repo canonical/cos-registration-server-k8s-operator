@@ -13,6 +13,7 @@ bases:
     run-on:
     - name: ubuntu
       channel: "22.04"
+
 containers:
   cos-registration-server:
     resource: cos-registration-server-image
@@ -57,6 +58,14 @@ provides:
     interface: grafana_dashboard
   auth-devices-keys:
     interface: auth_devices_keys
+  probes:
+    interface: blackbox_exporter_probes
+    description: |
+      Send over to blackbox exporter the app endpoints we want it to probe.
+  probes-devices:
+    interface: blackbox_exporter_probes
+    description: |
+      Send over to blackbox exporter the device endpoints we want it to probe.
 
 actions:
   get-admin-password:

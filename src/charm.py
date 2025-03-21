@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 import requests
+from charms.blackbox_exporter_k8s.v0.blackbox_probes import BlackboxProbesProvider
 from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder, LokiPushApiConsumer
@@ -24,7 +25,7 @@ from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
 from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer
 from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops import main
-from ops.charm import ActionEvent, CharmBase, HookEvent, RelationJoinedEvent
+from ops.charm import ActionEvent, CharmBase, CollectStatusEvent, HookEvent, RelationJoinedEvent
 from ops.framework import StoredState
 from ops.model import ActiveStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ChangeError, ExecError, Layer
@@ -112,6 +113,7 @@ class CosRegistrationServerCharm(CharmBase):
         self.framework.observe(self.on.leader_elected, self._configure_ingress)
         self.framework.observe(self.on.config_changed, self._configure_ingress)
         self.framework.observe(self.on.update_status, self._on_update_status)
+        self.framework.observe(self.on.collect_app_status, self._on_collect_status)
 
         self.framework.observe(
             self.on.cos_registration_server_pebble_ready, self._update_layer_and_restart
@@ -149,6 +151,27 @@ class CosRegistrationServerCharm(CharmBase):
             charm=self, relation_name="auth-devices-keys"
         )
 
+        self.blackbox_probes_provider = BlackboxProbesProvider(
+            charm=self,
+            probes=self.self_probe,
+            refresh_event=[
+                self.on.update_status,
+                self.ingress.on.ready,
+                self.on.config_changed,
+            ],
+        )
+
+        self.blackbox_probes_provider_devices = BlackboxProbesProvider(
+            charm=self,
+            probes=self.devices_ip_endpoints_probes,
+            refresh_event=[
+                self.on.update_status,
+                self.ingress.on.ready,
+                self.on.config_changed,
+            ],
+            relation_name="probes-devices",
+        )
+
         self.log_forwarder = LogForwarder(self)
 
         self.loki_alert_rules_path_devices = "src/loki_alert_rules/devices"
@@ -169,7 +192,8 @@ class CosRegistrationServerCharm(CharmBase):
         )
         # hack because PrometheusRemoteWriteConsumer doesn't
         # have the option to skip topology injection
-        self.prometheus_alerts_remote_write_consumer_devices.topology = None
+        # GH Issue (https://github.com/canonical/prometheus-k8s-operator/issues/688)
+        self.prometheus_alerts_remote_write_consumer_devices.topology = None  # pyright: ignore
 
         self.tracing_endpoint_requirer = TracingEndpointRequirer(self)
 
@@ -379,6 +403,10 @@ class CosRegistrationServerCharm(CharmBase):
             logger.error(f"Failed to fetch auth devices keys from '{database_url}': {e}")
             return None
 
+    def _on_collect_status(self, event: CollectStatusEvent):
+        event.add_status(self.blackbox_probes_provider.get_status())
+        event.add_status(self.blackbox_probes_provider_devices.get_status())
+
     @property
     def _scheme(self) -> str:
         return "http"
@@ -458,6 +486,53 @@ class CosRegistrationServerCharm(CharmBase):
         return pebble_layer
 
     @property
+    def self_probe(self):
+        """The self-monitoring blackbox probe."""
+        probe = {
+            "job_name": "blackbox_http_2xx",
+            "params": {"module": ["http_2xx"]},
+            "static_configs": [
+                {
+                    "targets": [self.external_url + "/api/v1/health/"],
+                    "labels": {"name": "cos-registration-server"},
+                }
+            ],
+        }
+        return [probe]
+
+    @property
+    def devices_ip_endpoints_probes(self):
+        """The devices IPs from the server database."""
+        database_url = (
+            self.external_url
+            + COS_REGISTRATION_SERVER_API_URL_BASE
+            + "devices/?fields=uid,address"
+        )
+        devices_addresses = []
+        devices_uids = []
+        try:
+            response = requests.get(database_url)
+            response.raise_for_status()
+            response_json = response.json()
+            if response_json:
+                devices_addresses = [item["address"] for item in response_json]
+                devices_uids = [item["uid"] for item in response_json]
+
+            jobs = []
+            for address, uid in zip(devices_addresses, devices_uids):
+                jobs.append(
+                    {
+                        "job_name": f"blackbox_icmp_{uid}",
+                        "metrics_path": "/probe",
+                        "params": {"module": ["icmp"]},
+                        "static_configs": [{"targets": [address], "labels": {"name": uid}}],
+                    }
+                )
+            return jobs
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch devices ip from '{database_url}': {e}")
+            return []
+
     def tracing_endpoint(self) -> Optional[str]:
         """Tempo endpoint for charm tracing."""
         endpoint = None

@@ -22,10 +22,19 @@ from charms.prometheus_k8s.v1.prometheus_remote_write import (
     PrometheusRemoteWriteConsumer,
 )
 from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
-from charms.tempo_coordinator_k8s.v0.tracing import TracingEndpointRequirer
+from charms.tempo_coordinator_k8s.v0.tracing import (
+    ProtocolNotRequestedError,
+    TracingEndpointRequirer,
+)
 from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
 from ops import main
-from ops.charm import ActionEvent, CharmBase, CollectStatusEvent, HookEvent, RelationJoinedEvent
+from ops.charm import (
+    ActionEvent,
+    CharmBase,
+    CollectStatusEvent,
+    HookEvent,
+    RelationJoinedEvent,
+)
 from ops.framework import StoredState
 from ops.model import ActiveStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ChangeError, ExecError, Layer
@@ -537,7 +546,13 @@ class CosRegistrationServerCharm(CharmBase):
         """Tempo endpoint for charm tracing."""
         endpoint = None
         if self.tracing_endpoint_requirer.is_ready():
-            endpoint = self.tracing_endpoint_requirer.get_endpoint("otlp_http")
+            try:
+                endpoint = self.tracing_endpoint_requirer.get_endpoint("otlp_http")
+            except ProtocolNotRequestedError as e:
+                logger.error(
+                    f"Failed to get tracing endpoint with protocol 'otlp_http'.\nError: {e}"
+                )
+                pass
 
         return endpoint
 

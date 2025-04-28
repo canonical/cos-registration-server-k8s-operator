@@ -5,7 +5,7 @@ description: |
 type: charm
 assumes:
   - k8s-api
-  - juju >= 3.4.3
+  - juju >= 3.1.10
 bases:
   - build-on:
     - name: ubuntu

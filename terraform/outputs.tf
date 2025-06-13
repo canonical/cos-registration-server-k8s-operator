@@ -1,5 +1,5 @@
 output "app_name" {
-  value = juju_application.cos_registration_server.name
+  value       = juju_application.cos_registration_server.name
   description = "The name of the deployed application"
 }
 

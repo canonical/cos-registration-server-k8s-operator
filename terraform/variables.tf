@@ -48,8 +48,8 @@ variable "units" {
 variable "resources" {
   description = "Resources used by the charm"
   type        = map(string)
-  default     = {
-    cos-registration-server-image: "ghcr.io/ubuntu-robotics/cos-registration-server:dev"
+  default = {
+    cos-registration-server-image : "ghcr.io/ubuntu-robotics/cos-registration-server:dev"
   }
 }
 

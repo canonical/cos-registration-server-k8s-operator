@@ -48,7 +48,7 @@ terraform apply -var="model=<MODEL_NAME>"
 | app\_name | Name to give the deployed application | `string` | `"cos-registration-server"` | no |
 | channel | Channel that the charm is deployed from | `string` | `"latest/edge"` | no |
 | config | Map of the charm configuration options | `map(string)` | `{}` | no |
-| constraints | String listing constraints for the application | `string` | `"arch="` | no |
+| constraints | String listing constraints for the application | `string` | `"arch=amd64"` | no |
 | resources | Resources used by the charm | `map(string)` | ```{ "cos-registration-server-image": "ghcr.io/canonical/cos-registration-server:dev" }``` | no |
 | revision | Revision number of the charm | `number` | `null` | no |
 | storage | Map of storage used by the application. Defaults to 1 GB, allocated by Juju | `map(string)` | `{}` | no |

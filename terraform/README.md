@@ -50,7 +50,7 @@ terraform apply -var="model=<MODEL_NAME>"
 | channel | Charm channel | `string` | `"latest/edge"` | no |
 | config | Config options as in the ones we pass in juju config | `map(string)` | `{}` | no |
 | constraints | Constraints to be applied | `string` | `""` | no |
-| resources | Resources used by the charm | `map(string)` | ```{ "cos-registration-server-image": "ghcr.io/ubuntu-robotics/cos-registration-server:dev" }``` | no |
+| resources | Resources used by the charm | `map(string)` | ```{ "cos-registration-server-image": "ghcr.io/canonical/cos-registration-server:dev" }``` | no |
 | revision | Charm revision | `number` | `null` | no |
 | storage | Map of storage used by the application. Defaults to 1 GB, allocated by Juju | `map(string)` | `{}` | no |
 | units | Number of units | `number` | `1` | no |

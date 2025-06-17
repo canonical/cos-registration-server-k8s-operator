@@ -49,7 +49,7 @@ variable "resources" {
   description = "Resources used by the charm"
   type        = map(string)
   default = {
-    cos-registration-server-image : "ghcr.io/ubuntu-robotics/cos-registration-server:dev"
+    cos-registration-server-image : "ghcr.io/canonical/cos-registration-server:dev"
   }
 }
 

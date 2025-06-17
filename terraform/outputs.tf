@@ -12,7 +12,7 @@ output "requires" {
     send_remote_write_alerts_devices = "send-remote-write-alerts-devices"
     tracing                          = "tracing"
   }
-  description = "The integration endpoints required by the application"
+  description = "Map of the integration endpoints required by the application"
 }
 
 output "provides" {
@@ -23,5 +23,5 @@ output "provides" {
     probes                    = "probes"
     probes_devices            = "probes-devices"
   }
-  description = "The integration endpoints provided by the application"
+  description = "Map of the integration endpoints provided by the application"
 }

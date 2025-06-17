@@ -44,21 +44,21 @@ terraform apply -var="model=<MODEL_NAME>"
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| model | Model name (must be a machine model) | `string` | n/a | yes |
-| app\_name | Application name | `string` | `"cos-registration-server"` | no |
-| channel | Charm channel | `string` | `"latest/edge"` | no |
-| config | Config options as in the ones we pass in juju config | `map(string)` | `{}` | no |
-| constraints | Constraints to be applied | `string` | `""` | no |
+| model | Name of the model to deploy to (must be a K8s model) | `string` | n/a | yes |
+| app\_name | Name to give the deployed application | `string` | `"cos-registration-server"` | no |
+| channel | Channel that the charm is deployed from | `string` | `"latest/edge"` | no |
+| config | Map of the charm configuration options | `map(string)` | `{}` | no |
+| constraints | String listing constraints for the application | `string` | `"arch="` | no |
 | resources | Resources used by the charm | `map(string)` | ```{ "cos-registration-server-image": "ghcr.io/canonical/cos-registration-server:dev" }``` | no |
-| revision | Charm revision | `number` | `null` | no |
+| revision | Revision number of the charm | `number` | `null` | no |
 | storage | Map of storage used by the application. Defaults to 1 GB, allocated by Juju | `map(string)` | `{}` | no |
-| units | Number of units | `number` | `1` | no |
+| units | Unit count/scale | `number` | `1` | no |
 
 ## Outputs
 
 | Name | Description |
 |------|-------------|
 | app\_name | The name of the deployed application |
-| provides | The integration endpoints provided by the application |
-| requires | The integration endpoints required by the application |
+| provides | Map of the integration endpoints provided by the application |
+| requires | Map of the integration endpoints required by the application |
 <!-- END_TF_DOCS -->

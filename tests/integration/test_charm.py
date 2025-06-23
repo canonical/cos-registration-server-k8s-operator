@@ -74,7 +74,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
     # Deploying grafana-agent-k8s and add the logging relation
     await deploy_and_assert_grafana_agent(
-        ops_test.model, APP_NAME, metrics=False, dashboard=True, logging=True
+        ops_test.model, APP_NAME, channel="1/stable", metrics=False, dashboard=True, logging=True
     )
     logger.info(
         "Adding relation: %s:%s and %s:%s",

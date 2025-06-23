@@ -362,7 +362,6 @@ class CosRegistrationServerCharm(CharmBase):
     def _update_layer_and_restart(self, event) -> None:
         """Define and start a workload using the Pebble API."""
         self.unit.status = MaintenanceStatus("Assembling pod spec")
-        # self.ingress.provide_ingress_requirements(scheme=self._scheme, port=80, host=self.external_url)
         if self.container.can_connect():
             try:
                 if not self.container.exists("/server_data/secret_key"):
@@ -460,7 +459,7 @@ class CosRegistrationServerCharm(CharmBase):
         if not url:
             logger.warning("No ingress URL configured, returning internal URL")
             return self.internal_host
-        return urlparse(url).hostname
+        return urlparse(url).hostname or self.internal_host
 
     @property
     def self_probe(self):

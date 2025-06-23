@@ -12,6 +12,7 @@ import string
 from os import mkdir
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 import requests
 from charms.blackbox_exporter_k8s.v0.blackbox_probes import BlackboxProbesProvider
@@ -26,14 +27,14 @@ from charms.tempo_coordinator_k8s.v0.tracing import (
     ProtocolNotRequestedError,
     TracingEndpointRequirer,
 )
-from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
+from charms.traefik_k8s.v2.ingress import (
+    IngressPerAppRequirer,
+)
 from ops import main
 from ops.charm import (
     ActionEvent,
     CharmBase,
     CollectStatusEvent,
-    HookEvent,
-    RelationJoinedEvent,
 )
 from ops.framework import StoredState
 from ops.model import ActiveStatus, MaintenanceStatus, WaitingStatus
@@ -91,7 +92,7 @@ def md5_list(lst):
         CatalogueConsumer,
         GrafanaDashboardProvider,
         LogForwarder,
-        TraefikRouteRequirer,
+        IngressPerAppRequirer,
     ),
 )
 class CosRegistrationServerCharm(CharmBase):
@@ -116,11 +117,11 @@ class CosRegistrationServerCharm(CharmBase):
             loki_alert_rules_hash="",
             prometheus_alert_rules_hash="",
         )
-        self.ingress = TraefikRouteRequirer(self, self.model.get_relation("ingress"), "ingress")  # type: ignore
-        self.framework.observe(self.on["ingress"].relation_joined, self._configure_ingress)
+        self.ingress = IngressPerAppRequirer(self, port=8000)
+        # The following event is triggered when the ingress URL to be used
+        # by this deployment of the `SomeCharm` is ready (or changes).
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
-        self.framework.observe(self.on.leader_elected, self._configure_ingress)
-        self.framework.observe(self.on.config_changed, self._configure_ingress)
+        self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.collect_app_status, self._on_collect_status)
 
@@ -210,6 +211,9 @@ class CosRegistrationServerCharm(CharmBase):
         """Once Traefik tells us our external URL, make sure we reconfigure the charm."""
         self._update_layer_and_restart(None)
 
+    def _on_ingress_revoked(self, _):
+        logger.info("This app no longer has ingress")
+
     def _generate_password(self) -> str:
         """Generates a random 12 character password."""
         chars = string.ascii_letters + string.digits
@@ -258,22 +262,6 @@ class CosRegistrationServerCharm(CharmBase):
                 "password": self._get_admin_password(),
             }
         )
-
-    def _configure_ingress(self, event: HookEvent) -> None:
-        """Set up ingress if a relation is joined, config changed, or a new leader election."""
-        if not self.unit.is_leader():
-            return
-
-        # If it's a RelationJoinedEvent, set it in the ingress object
-        if isinstance(event, RelationJoinedEvent):
-            self.ingress._relation = event.relation
-
-        # No matter what, check readiness -- this blindly checks whether `ingress._relation` is not
-        # None, so it overlaps a little with the above, but works as expected on leader elections
-        # and config-change
-        if self.ingress.is_ready():
-            self._update_layer_and_restart(None)
-            self.ingress.submit_to_traefik(self._ingress_config)
 
     def _on_update_status(self, _) -> None:
         """Event processing hook that is common to all events to ensure idempotency."""
@@ -374,6 +362,7 @@ class CosRegistrationServerCharm(CharmBase):
     def _update_layer_and_restart(self, event) -> None:
         """Define and start a workload using the Pebble API."""
         self.unit.status = MaintenanceStatus("Assembling pod spec")
+        # self.ingress.provide_ingress_requirements(scheme=self._scheme, port=80, host=self.external_url)
         if self.container.can_connect():
             try:
                 if not self.container.exists("/server_data/secret_key"):
@@ -417,63 +406,11 @@ class CosRegistrationServerCharm(CharmBase):
         event.add_status(self.blackbox_probes_provider_devices.get_status())
 
     @property
-    def _scheme(self) -> str:
-        return "http"
-
-    @property
-    def internal_url(self) -> str:
-        """Return workload's internal URL. Used for ingress."""
-        return f"{self._scheme}://{socket.getfqdn()}:{8000}"
-
-    @property
-    def external_url(self) -> str:
-        """Return the external hostname configured, if any."""
-        if self.ingress.external_host:
-            path_prefix = f"{self.model.name}-{self.model.app.name}"
-            return f"{self._scheme}://{self.ingress.external_host}/{path_prefix}"
-        return self.internal_url
-
-    @property
-    def _ingress_config(self) -> dict:
-        """Build a raw ingress configuration for Traefik."""
-        # The path prefix is the same as in ingress per app
-        external_path = f"{self.model.name}-{self.model.app.name}"
-
-        routers = {
-            "juju-{}-{}-router".format(self.model.name, self.model.app.name): {
-                "entryPoints": ["web"],
-                "rule": f"PathPrefix(`/{external_path}`)",
-                "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
-            },
-            "juju-{}-{}-router-tls".format(self.model.name, self.model.app.name): {
-                "entryPoints": ["websecure"],
-                "rule": f"PathPrefix(`/{external_path}`)",
-                "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
-                "tls": {
-                    "domains": [
-                        {
-                            "main": self.ingress.external_host,
-                            "sans": [f"*.{self.ingress.external_host}"],
-                        },
-                    ],
-                },
-            },
-        }
-
-        services = {
-            "juju-{}-{}-service".format(self.model.name, self.model.app.name): {
-                "loadBalancer": {"servers": [{"url": self.internal_url}]}
-            }
-        }
-
-        return {"http": {"routers": routers, "services": services}}
-
-    @property
-    def _pebble_layer(self):
+    def _pebble_layer(self) -> Layer:
         """Return a dictionary representing a Pebble layer."""
         command = " ".join(["/usr/bin/launcher.bash"])
 
-        pebble_layer = Layer(
+        return Layer(
             {
                 "summary": "cos registration server k8s layer",
                 "description": "cos registration server k8s layer",
@@ -484,7 +421,7 @@ class CosRegistrationServerCharm(CharmBase):
                         "command": command,
                         "startup": "enabled",
                         "environment": {
-                            "ALLOWED_HOST_DJANGO": self.ingress.external_host,
+                            "ALLOWED_HOST_DJANGO": self.external_host,
                             "SCRIPT_NAME": f"/{self.model.name}-{self.model.app.name}",
                             "COS_MODEL_NAME": f"{self.model.name}",
                         },
@@ -492,7 +429,38 @@ class CosRegistrationServerCharm(CharmBase):
                 },
             }
         )
-        return pebble_layer
+
+    @property
+    def _scheme(self) -> str:
+        return "http"
+
+    @property
+    def internal_host(self) -> str:
+        """Return workload's internal host. Used for ingress."""
+        return f"{socket.getfqdn()}"
+
+    @property
+    def internal_url(self) -> str:
+        """Return workload's internal URL. Used for ingress."""
+        return f"{self._scheme}://{self.internal_host}:{8000}"
+
+    @property
+    def external_url(self) -> str:
+        """Return the external URL configured, if any."""
+        url = self.ingress.url
+        if not url:
+            logger.warning("No ingress URL configured, returning internal URL")
+            return self.internal_url
+        return url
+
+    @property
+    def external_host(self) -> str:
+        """Return the external hostname configured, if any."""
+        url = self.ingress.url
+        if not url:
+            logger.warning("No ingress URL configured, returning internal URL")
+            return self.internal_host
+        return urlparse(url).hostname
 
     @property
     def self_probe(self):

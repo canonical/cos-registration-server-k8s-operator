@@ -15,8 +15,8 @@ bases:
       channel: "22.04"
 
 charm-libs:
-  - lib: traefik_route_k8s.traefik_route
-    version: "0"
+  - lib: traefik_k8s.ingress
+    version: "2"
   - lib: blackbox_exporter_k8s.blackbox_probes
     version: "0"
   - lib: grafana_k8s.grafana_dashboard
@@ -53,7 +53,7 @@ storage:
 
 requires:
   ingress:
-    interface: traefik_route
+    interface: ingress
     limit: 1
   catalogue:
     interface: catalogue

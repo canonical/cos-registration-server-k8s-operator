@@ -441,7 +441,9 @@ class CosRegistrationServerCharm(CharmBase):
     @property
     def internal_url(self) -> str:
         """Return workload's internal URL. Used for ingress."""
-        return f"{self._scheme}://{self.internal_host}:{8000}"
+        return (
+            f"{self._scheme}://{self.internal_host}:{8000}/{self.model.name}-{self.model.app.name}"
+        )
 
     @property
     def external_url(self) -> str:

@@ -65,7 +65,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
     await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
     # Deploy prometheus-k8s
     # We must deploy prometheus since grafana-agent-k8s doesn't receive remote-write
-    await ops_test.model.deploy(PROMETHEUS_APP, channel="latest/stable", trust=True)
+    await ops_test.model.deploy(PROMETHEUS_APP, channel="1/stable", trust=True)
 
     # and wait for active/idle status
     await ops_test.model.wait_for_idle(
@@ -74,7 +74,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
     # Deploying grafana-agent-k8s and add the logging relation
     await deploy_and_assert_grafana_agent(
-        ops_test.model, APP_NAME, metrics=False, dashboard=True, logging=True
+        ops_test.model, APP_NAME, channel="1/stable", metrics=False, dashboard=True, logging=True
     )
     logger.info(
         "Adding relation: %s:%s and %s:%s",
@@ -206,9 +206,7 @@ async def test_tracing(ops_test: OpsTest):
 async def test_integrate_blackbox(ops_test: OpsTest):
     # @todo: upgrade to stable when blackbox charm with probes relation
     # is promoted from edge.
-    await ops_test.model.deploy(
-        "blackbox-exporter-k8s", "blackbox", channel="latest/edge", trust=True
-    )
+    await ops_test.model.deploy("blackbox-exporter-k8s", "blackbox", channel="1/edge", trust=True)
 
     logger.info(
         "Adding relation: %s:%s",

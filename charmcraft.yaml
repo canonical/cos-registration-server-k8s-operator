@@ -14,6 +14,29 @@ bases:
     - name: ubuntu
       channel: "22.04"
 
+charm-libs:
+  - lib: traefik_k8s.ingress
+    version: "2"
+  - lib: blackbox_exporter_k8s.blackbox_probes
+    version: "0"
+  - lib: grafana_k8s.grafana_dashboard
+    version: "0"
+  - lib: grafana_k8s.grafana_source
+    version: "0"
+  - lib: grafana_k8s.grafana_auth
+    version: "0"
+  - lib: loki_k8s.loki_push_api
+    version: "1"
+  - lib: prometheus_k8s.prometheus_remote_write
+    # The latest prometheus_remote_write (LIBPATCH 7),
+    # is ignoring the case where juju topology is none.
+    # We freeze 1.5 for now, until the issue is fixed.
+    version: "1.5"
+  - lib: tempo_coordinator_k8s.charm_tracing
+    version: "0"
+  - lib: tempo_coordinator_k8s.tracing
+    version: "0"
+
 containers:
   cos-registration-server:
     resource: cos-registration-server-image
@@ -33,7 +56,7 @@ storage:
 
 requires:
   ingress:
-    interface: traefik_route
+    interface: ingress
     limit: 1
   catalogue:
     interface: catalogue

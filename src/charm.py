@@ -2,34 +2,45 @@
 
 """A kubernetes charm for registering devices."""
 
-import logging
-import string
-import secrets
 import hashlib
-import requests
 import json
-
-from os import path
+import logging
+import secrets
+import shutil
+import socket
+import string
+from os import mkdir
 from pathlib import Path
+from typing import Optional
+from urllib.parse import urlparse
 
+import requests
+from charms.blackbox_exporter_k8s.v0.blackbox_probes import BlackboxProbesProvider
+from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.loki_k8s.v1.loki_push_api import LogForwarder, LokiPushApiConsumer
+from charms.prometheus_k8s.v1.prometheus_remote_write import (
+    PrometheusRemoteWriteConsumer,
+)
+from charms.tempo_coordinator_k8s.v0.charm_tracing import trace_charm
+from charms.tempo_coordinator_k8s.v0.tracing import (
+    ProtocolNotRequestedError,
+    TracingEndpointRequirer,
+)
+from charms.traefik_k8s.v2.ingress import (
+    IngressPerAppRequirer,
+)
+from ops import main
 from ops.charm import (
     ActionEvent,
     CharmBase,
-    HookEvent,
-    RelationJoinedEvent,
+    CollectStatusEvent,
 )
-
 from ops.framework import StoredState
-from ops.main import main
 from ops.model import ActiveStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import Layer, ExecError, ChangeError
+from ops.pebble import ChangeError, ExecError, Layer
 
-
-from charms.traefik_route_k8s.v0.traefik_route import TraefikRouteRequirer
-from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
-from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
-from charms.auth_devices_keys_k8s.v0.auth_devices_keys import AuthDevicesKeysProvider
-import socket
+from auth_devices_keys import AuthDevicesKeysProvider
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
@@ -67,6 +78,23 @@ def md5_dict(dict):
     return hash_value
 
 
+def md5_list(lst):
+    """Generate the hash of a list."""
+    hash_object = hashlib.md5(repr(lst).encode())
+    hash_value = hash_object.hexdigest()
+    return hash_value
+
+
+@trace_charm(
+    tracing_endpoint="tracing_endpoint",
+    extra_types=(
+        AuthDevicesKeysProvider,
+        CatalogueConsumer,
+        GrafanaDashboardProvider,
+        LogForwarder,
+        IngressPerAppRequirer,
+    ),
+)
 class CosRegistrationServerCharm(CharmBase):
     """Charm to run a COS registration server on Kubernetes."""
 
@@ -80,21 +108,22 @@ class CosRegistrationServerCharm(CharmBase):
             # Storage isn't available yet. Since storage becomes available early enough, no need
             # to observe storage-attached and complicate things; simply abort until it is ready.
             return
-        self._server_data_mount_point = self.model.storages["database"][0].location
-        self._grafana_dashboards_path = path.join(
-            self._server_data_mount_point, "grafana_dashboards"
-        )
 
         self.container = self.unit.get_container(self.name)
         self._stored.set_default(
-            admin_password="", dashboard_dict_hash="", auth_devices_keys_hash=""
+            admin_password="",
+            dashboard_dict_hash="",
+            auth_devices_keys_hash="",
+            loki_alert_rules_hash="",
+            prometheus_alert_rules_hash="",
         )
-        self.ingress = TraefikRouteRequirer(self, self.model.get_relation("ingress"), "ingress")  # type: ignore
-        self.framework.observe(self.on["ingress"].relation_joined, self._configure_ingress)
+        self.ingress = IngressPerAppRequirer(self, port=8000)
+        # The following event is triggered when the ingress URL to be used
+        # by this deployment of the `SomeCharm` is ready (or changes).
         self.framework.observe(self.ingress.on.ready, self._on_ingress_ready)
-        self.framework.observe(self.on.leader_elected, self._configure_ingress)
-        self.framework.observe(self.on.config_changed, self._configure_ingress)
+        self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
         self.framework.observe(self.on.update_status, self._on_update_status)
+        self.framework.observe(self.on.collect_app_status, self._on_collect_status)
 
         self.framework.observe(
             self.on.cos_registration_server_pebble_ready, self._update_layer_and_restart
@@ -121,17 +150,69 @@ class CosRegistrationServerCharm(CharmBase):
             ),
         )
 
-        self.grafana_dashboard_provider = GrafanaDashboardProvider(
-            charm=self, dashboards_path=self._grafana_dashboards_path
+        self.grafana_dashboard_provider = GrafanaDashboardProvider(self)
+        self.grafana_dashboard_provider_devices = GrafanaDashboardProvider(
+            self,
+            relation_name="grafana-dashboard-devices",
+            dashboards_path="src/grafana_dashboards/devices",
         )
 
         self.auth_devices_keys_provider = AuthDevicesKeysProvider(
             charm=self, relation_name="auth-devices-keys"
         )
 
+        self.blackbox_probes_provider = BlackboxProbesProvider(
+            charm=self,
+            probes=self.self_probe,
+            refresh_event=[
+                self.on.update_status,
+                self.ingress.on.ready,
+                self.on.config_changed,
+            ],
+        )
+
+        self.blackbox_probes_provider_devices = BlackboxProbesProvider(
+            charm=self,
+            probes=self.devices_ip_endpoints_probes,
+            refresh_event=[
+                self.on.update_status,
+                self.ingress.on.ready,
+                self.on.config_changed,
+            ],
+            relation_name="probes-devices",
+        )
+
+        self.log_forwarder = LogForwarder(self)
+
+        self.loki_alert_rules_path_devices = "src/loki_alert_rules/devices"
+        self.loki_push_api_consumer_devices = LokiPushApiConsumer(
+            charm=self,
+            relation_name="logging-alerts-devices",
+            alert_rules_path=self.loki_alert_rules_path_devices,
+            # The alerts we are sending are not specific to
+            # cos-registration-server but to devices outside of juju
+            skip_alert_topology_labeling=True,
+        )
+
+        self.prometheus_alert_rule_files_path_devices = "src/prometheus_alert_rules/devices"
+        self.prometheus_alerts_remote_write_consumer_devices = PrometheusRemoteWriteConsumer(
+            charm=self,
+            relation_name="send-remote-write-alerts-devices",
+            alert_rules_path=self.prometheus_alert_rule_files_path_devices,
+        )
+        # hack because PrometheusRemoteWriteConsumer doesn't
+        # have the option to skip topology injection
+        # GH Issue (https://github.com/canonical/prometheus-k8s-operator/issues/688)
+        self.prometheus_alerts_remote_write_consumer_devices.topology = None  # pyright: ignore
+
+        self.tracing_endpoint_requirer = TracingEndpointRequirer(self)
+
     def _on_ingress_ready(self, _) -> None:
         """Once Traefik tells us our external URL, make sure we reconfigure the charm."""
         self._update_layer_and_restart(None)
+
+    def _on_ingress_revoked(self, _):
+        logger.info("This app no longer has ingress")
 
     def _generate_password(self) -> str:
         """Generates a random 12 character password."""
@@ -182,22 +263,6 @@ class CosRegistrationServerCharm(CharmBase):
             }
         )
 
-    def _configure_ingress(self, event: HookEvent) -> None:
-        """Set up ingress if a relation is joined, config changed, or a new leader election."""
-        if not self.unit.is_leader():
-            return
-
-        # If it's a RelationJoinedEvent, set it in the ingress object
-        if isinstance(event, RelationJoinedEvent):
-            self.ingress._relation = event.relation
-
-        # No matter what, check readiness -- this blindly checks whether `ingress._relation` is not
-        # None, so it overlaps a little with the above, but works as expected on leader elections
-        # and config-change
-        if self.ingress.is_ready():
-            self._update_layer_and_restart(None)
-            self.ingress.submit_to_traefik(self._ingress_config)
-
     def _on_update_status(self, _) -> None:
         """Event processing hook that is common to all events to ensure idempotency."""
         if not self.container.can_connect():
@@ -205,12 +270,14 @@ class CosRegistrationServerCharm(CharmBase):
             return
         self._update_grafana_dashboards()
         self._update_auth_devices_keys()
+        self._update_loki_alert_rule_files_devices()
+        self._update_prometheus_alert_rule_files_devices()
 
     def _get_grafana_dashboards_from_db(self):
         database_url = (
-            self.external_url
+            self.internal_url
             + COS_REGISTRATION_SERVER_API_URL_BASE
-            + "applications/grafana/dashboards"
+            + "applications/grafana/dashboards/"
         )
         try:
             response = requests.get(database_url)
@@ -226,23 +293,71 @@ class CosRegistrationServerCharm(CharmBase):
             if md5 != self._stored.dashboard_dict_hash:
                 logger.info("Grafana dashboards dict hash changed, updating dashboards!")
                 self._stored.dashboard_dict_hash = md5
-                self.grafana_dashboard_provider.remove_non_builtin_dashboards()
+                self.grafana_dashboard_provider_devices.remove_non_builtin_dashboards()
                 for dashboard in grafana_dashboards:
                     # assign dashboard uid in the grafana dashboard format
                     dashboard["dashboard"]["uid"] = dashboard["uid"]
-                    self.grafana_dashboard_provider.add_dashboard(
+                    self.grafana_dashboard_provider_devices.add_dashboard(
                         json.dumps(dashboard["dashboard"]), inject_dropdowns=False
                     )
 
     def _update_auth_devices_keys(self) -> None:
-        if auth_devices_keys_dict := self._get_auth_devices_keys_from_db():
-            md5_keys_dict_hash = md5_dict(auth_devices_keys_dict)
-            if md5_keys_dict_hash != self._stored.auth_devices_keys_hash:
+        if auth_devices_keys := self._get_auth_devices_keys_from_db():
+            md5_keys_list_hash = md5_list(auth_devices_keys)
+            if md5_keys_list_hash != self._stored.auth_devices_keys_hash:
                 logger.info("Authorized device keys hash has changed, updating them!")
-                self._stored.auth_devices_keys_hash = md5_keys_dict_hash
+                self._stored.auth_devices_keys_hash = md5_keys_list_hash
                 self.auth_devices_keys_provider.update_all_auth_devices_keys_from_db(
-                    auth_devices_keys_dict
+                    auth_devices_keys
                 )
+
+    def _get_alert_rule_files_from_db(self, application: str):
+        database_url = (
+            self.internal_url
+            + COS_REGISTRATION_SERVER_API_URL_BASE
+            + f"applications/{application}/alert_rules/"
+        )
+        try:
+            response = requests.get(database_url)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch {application} alert rules from '{database_url}': {e}")
+            return None
+        else:
+            return response.json()
+
+    def _write_alert_rule_files_to_dir(self, path: str, alert_rule_files):
+        shutil.rmtree(path, ignore_errors=True)
+        mkdir(path)
+        for alert_rule_file in alert_rule_files:
+            rule_file_name = alert_rule_file["uid"].replace("/", "_")
+            with open(f"{path}/{rule_file_name}.rule", "w") as f:
+                f.write(alert_rule_file["rules"])
+
+    def _update_loki_alert_rule_files_devices(self) -> None:
+        if loki_alert_rules := self._get_alert_rule_files_from_db(application="loki"):
+            md5_keys_list_hash = md5_list(loki_alert_rules)
+            if md5_keys_list_hash != self._stored.loki_alert_rules_hash:
+                logger.info("Loki alert rules hash has changed, updating them!")
+                self._stored.loki_alert_rules_hash = md5_keys_list_hash
+                self._write_alert_rule_files_to_dir(
+                    path=self.loki_alert_rules_path_devices, alert_rule_files=loki_alert_rules
+                )
+                self.loki_push_api_consumer_devices._reinitialize_alert_rules()
+
+    def _update_prometheus_alert_rule_files_devices(self) -> None:
+        if prometheus_alert_rule_files := self._get_alert_rule_files_from_db(
+            application="prometheus"
+        ):
+            md5_keys_list_hash = md5_list(prometheus_alert_rule_files)
+            if md5_keys_list_hash != self._stored.prometheus_alert_rules_hash:
+                logger.info("Prometheus alert rule files hash has changed, updating them!")
+                self._stored.prometheus_alert_rules_hash = md5_keys_list_hash
+                self._write_alert_rule_files_to_dir(
+                    path=self.prometheus_alert_rule_files_path_devices,
+                    alert_rule_files=prometheus_alert_rule_files,
+                )
+                self.prometheus_alerts_remote_write_consumer_devices.reload_alerts()
 
     def _update_layer_and_restart(self, event) -> None:
         """Define and start a workload using the Pebble API."""
@@ -285,64 +400,16 @@ class CosRegistrationServerCharm(CharmBase):
             logger.error(f"Failed to fetch auth devices keys from '{database_url}': {e}")
             return None
 
-    @property
-    def _scheme(self) -> str:
-        return "http"
+    def _on_collect_status(self, event: CollectStatusEvent):
+        event.add_status(self.blackbox_probes_provider.get_status())
+        event.add_status(self.blackbox_probes_provider_devices.get_status())
 
     @property
-    def internal_url(self) -> str:
-        """Return workload's internal URL. Used for ingress."""
-        return f"{self._scheme}://{socket.getfqdn()}:{8000}"
-
-    @property
-    def external_url(self) -> str:
-        """Return the external hostname configured, if any."""
-        if self.ingress.external_host:
-            path_prefix = f"{self.model.name}-{self.model.app.name}"
-            return f"{self._scheme}://{self.ingress.external_host}/{path_prefix}"
-        return self.internal_url
-
-    @property
-    def _ingress_config(self) -> dict:
-        """Build a raw ingress configuration for Traefik."""
-        # The path prefix is the same as in ingress per app
-        external_path = f"{self.model.name}-{self.model.app.name}"
-
-        routers = {
-            "juju-{}-{}-router".format(self.model.name, self.model.app.name): {
-                "entryPoints": ["web"],
-                "rule": f"PathPrefix(`/{external_path}`)",
-                "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
-            },
-            "juju-{}-{}-router-tls".format(self.model.name, self.model.app.name): {
-                "entryPoints": ["websecure"],
-                "rule": f"PathPrefix(`/{external_path}`)",
-                "service": "juju-{}-{}-service".format(self.model.name, self.app.name),
-                "tls": {
-                    "domains": [
-                        {
-                            "main": self.ingress.external_host,
-                            "sans": [f"*.{self.ingress.external_host}"],
-                        },
-                    ],
-                },
-            },
-        }
-
-        services = {
-            "juju-{}-{}-service".format(self.model.name, self.model.app.name): {
-                "loadBalancer": {"servers": [{"url": self.internal_url}]}
-            }
-        }
-
-        return {"http": {"routers": routers, "services": services}}
-
-    @property
-    def _pebble_layer(self):
+    def _pebble_layer(self) -> Layer:
         """Return a dictionary representing a Pebble layer."""
         command = " ".join(["/usr/bin/launcher.bash"])
 
-        pebble_layer = Layer(
+        return Layer(
             {
                 "summary": "cos registration server k8s layer",
                 "description": "cos registration server k8s layer",
@@ -353,14 +420,111 @@ class CosRegistrationServerCharm(CharmBase):
                         "command": command,
                         "startup": "enabled",
                         "environment": {
-                            "ALLOWED_HOST_DJANGO": f"{self.ingress.external_host},{socket.getfqdn()}",
+                            "ALLOWED_HOST_DJANGO": f"{self.external_host},{self.internal_host}",
                             "SCRIPT_NAME": f"/{self.model.name}-{self.model.app.name}",
+                            "SCRIPT_NAME": f"/{self.model.name}-{self.model.app.name}",
+                            "COS_MODEL_NAME": f"{self.model.name}",
                         },
                     }
                 },
             }
         )
-        return pebble_layer
+
+    @property
+    def _scheme(self) -> str:
+        return "http"
+
+    @property
+    def internal_host(self) -> str:
+        """Return workload's internal host. Used for ingress."""
+        return f"{socket.getfqdn()}"
+
+    @property
+    def internal_url(self) -> str:
+        """Return workload's internal URL. Used for ingress."""
+        return (
+            f"{self._scheme}://{self.internal_host}:{8000}/{self.model.name}-{self.model.app.name}"
+        )
+
+    @property
+    def external_url(self) -> str:
+        """Return the external URL configured, if any."""
+        url = self.ingress.url
+        if not url:
+            logger.warning("No ingress URL configured, returning internal URL")
+            return self.internal_url
+        return url
+
+    @property
+    def external_host(self) -> str:
+        """Return the external hostname configured, if any."""
+        url = self.ingress.url
+        if not url:
+            logger.warning("No ingress URL configured, returning internal URL")
+            return self.internal_host
+        return urlparse(url).hostname or self.internal_host
+
+    @property
+    def self_probe(self):
+        """The self-monitoring blackbox probe."""
+        probe = {
+            "job_name": "blackbox_http_2xx",
+            "params": {"module": ["http_2xx"]},
+            "static_configs": [
+                {
+                    "targets": [self.internal_url + "/api/v1/health/"],
+                    "labels": {"name": "cos-registration-server"},
+                }
+            ],
+        }
+        return [probe]
+
+    @property
+    def devices_ip_endpoints_probes(self):
+        """The devices IPs from the server database."""
+        database_url = (
+            self.internal_url
+            + COS_REGISTRATION_SERVER_API_URL_BASE
+            + "devices/?fields=uid,address"
+        )
+        devices_addresses = []
+        devices_uids = []
+        try:
+            response = requests.get(database_url)
+            response.raise_for_status()
+            response_json = response.json()
+            if response_json:
+                devices_addresses = [item["address"] for item in response_json]
+                devices_uids = [item["uid"] for item in response_json]
+
+            jobs = []
+            for address, uid in zip(devices_addresses, devices_uids):
+                jobs.append(
+                    {
+                        "job_name": f"blackbox_icmp_{uid}",
+                        "metrics_path": "/probe",
+                        "params": {"module": ["icmp"]},
+                        "static_configs": [{"targets": [address], "labels": {"name": uid}}],
+                    }
+                )
+            return jobs
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch devices ip from '{database_url}': {e}")
+            return []
+
+    def tracing_endpoint(self) -> Optional[str]:
+        """Tempo endpoint for charm tracing."""
+        endpoint = None
+        if self.tracing_endpoint_requirer.is_ready():
+            try:
+                endpoint = self.tracing_endpoint_requirer.get_endpoint("otlp_http")
+            except ProtocolNotRequestedError as e:
+                logger.error(
+                    f"Failed to get tracing endpoint with protocol 'otlp_http'.\nError: {e}"
+                )
+                pass
+
+        return endpoint
 
 
 if __name__ == "__main__":  # pragma: nocover

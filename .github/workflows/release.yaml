@@ -1,0 +1,19 @@
+name: Release Charm to Edge and Publish Libraries
+
+on:
+  push:
+    paths-ignore:
+      - '.gitignore'
+      - 'LICENSE'
+      - '**.md'
+    branches:
+      - main
+
+jobs:
+  release:
+    uses: canonical/observability/.github/workflows/charm-release.yaml@v0
+    # See https://github.com/canonical/observability/issues/268
+    # secrets: inherit
+    secrets:
+      CHARMHUB_TOKEN: ${{ secrets.CHARMHUB_TOKEN }}
+

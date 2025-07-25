@@ -1,0 +1,33 @@
+name: Pull Requests
+
+on:
+  pull_request:
+    paths-ignore:
+      - '.gitignore'
+      - 'LICENSE'
+      - '**.md'
+    branches:
+      - main
+
+jobs:
+  terraform-docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.ref }}
+
+    - name: Render terraform docs and push changes back to PR
+      uses: terraform-docs/gh-actions@v1
+      with:
+        working-dir: terraform
+        output-file: README.md
+        output-method: inject
+        git-push: "true"
+
+  pull-request:
+    name: PR
+    uses: canonical/observability/.github/workflows/charm-pull-request.yaml@v0
+    secrets: inherit
+    with:
+      charmcraft-channel: latest/stable

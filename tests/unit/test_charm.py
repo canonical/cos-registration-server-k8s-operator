@@ -71,7 +71,7 @@ class TestCharm(unittest.TestCase):
                         "command": command,
                         "startup": "enabled",
                         "environment": {
-                            "ALLOWED_HOST_DJANGO": self.external_host,
+                            "ALLOWED_HOST_DJANGO": f"{self.external_host},{self.internal_host}",
                             "SCRIPT_NAME": f"/{self.harness._backend.model_name}-{self.harness._backend.app_name}",
                             "COS_MODEL_NAME": f"{self.harness._backend.model_name}",
                         },

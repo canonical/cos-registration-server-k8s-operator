@@ -471,7 +471,7 @@ class CosRegistrationServerCharm(CharmBase):
             "params": {"module": ["http_2xx"]},
             "static_configs": [
                 {
-                    "targets": [self.internal_url + "/api/v1/health/"],
+                    "targets": [self.external_url + "/api/v1/health/"],
                     "labels": {"name": "cos-registration-server"},
                 }
             ],

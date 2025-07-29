@@ -275,7 +275,7 @@ class CosRegistrationServerCharm(CharmBase):
 
     def _get_grafana_dashboards_from_db(self):
         database_url = (
-            self.external_url
+            self.internal_url
             + COS_REGISTRATION_SERVER_API_URL_BASE
             + "applications/grafana/dashboards/"
         )
@@ -313,7 +313,7 @@ class CosRegistrationServerCharm(CharmBase):
 
     def _get_alert_rule_files_from_db(self, application: str):
         database_url = (
-            self.external_url
+            self.internal_url
             + COS_REGISTRATION_SERVER_API_URL_BASE
             + f"applications/{application}/alert_rules/"
         )
@@ -388,7 +388,7 @@ class CosRegistrationServerCharm(CharmBase):
 
     def _get_auth_devices_keys_from_db(self):
         database_url = (
-            self.external_url
+            self.internal_url
             + COS_REGISTRATION_SERVER_API_URL_BASE
             + "devices/?fields=uid,public_ssh_key"
         )
@@ -420,7 +420,7 @@ class CosRegistrationServerCharm(CharmBase):
                         "command": command,
                         "startup": "enabled",
                         "environment": {
-                            "ALLOWED_HOST_DJANGO": self.external_host,
+                            "ALLOWED_HOST_DJANGO": f"{self.external_host},{self.internal_host}",
                             "SCRIPT_NAME": f"/{self.model.name}-{self.model.app.name}",
                             "COS_MODEL_NAME": f"{self.model.name}",
                         },
@@ -482,7 +482,7 @@ class CosRegistrationServerCharm(CharmBase):
     def devices_ip_endpoints_probes(self):
         """The devices IPs from the server database."""
         database_url = (
-            self.external_url
+            self.internal_url
             + COS_REGISTRATION_SERVER_API_URL_BASE
             + "devices/?fields=uid,address"
         )

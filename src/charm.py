@@ -423,6 +423,7 @@ class CosRegistrationServerCharm(CharmBase):
                             "ALLOWED_HOST_DJANGO": f"{self.external_host},{self.internal_host}",
                             "SCRIPT_NAME": f"/{self.model.name}-{self.model.app.name}",
                             "COS_MODEL_NAME": f"{self.model.name}",
+                            "CSRF_TRUSTED_ORIGINS": f"https://{self.external_host}",
                         },
                     }
                 },

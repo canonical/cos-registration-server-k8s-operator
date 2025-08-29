@@ -74,6 +74,7 @@ class TestCharm(unittest.TestCase):
                             "ALLOWED_HOST_DJANGO": f"{self.external_host},{self.harness.charm.internal_host}",
                             "SCRIPT_NAME": f"/{self.harness._backend.model_name}-{self.harness._backend.app_name}",
                             "COS_MODEL_NAME": f"{self.harness._backend.model_name}",
+                            "CSRF_TRUSTED_ORIGINS": f"https://{self.external_host}",
                         },
                     }
                 },

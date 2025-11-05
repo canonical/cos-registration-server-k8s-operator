@@ -26,7 +26,7 @@ variable "constraints" {
   default     = "arch=amd64"
 }
 
-variable "model" {
+variable "model_uuid" {
   description = "Name of the model to deploy to (must be a K8s model)"
   type        = string
   nullable    = false

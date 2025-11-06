@@ -44,7 +44,7 @@ terraform apply -var="model_uuid=<MODEL_NAME>"
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| model_uuid | Name of the model to deploy to (must be a K8s model) | `string` | n/a | yes |
+| model\_uuid | Name of the model to deploy to (must be a K8s model) | `string` | n/a | yes |
 | app\_name | Name to give the deployed application | `string` | `"cos-registration-server"` | no |
 | channel | Channel that the charm is deployed from | `string` | `"latest/edge"` | no |
 | config | Map of the charm configuration options | `map(string)` | `{}` | no |

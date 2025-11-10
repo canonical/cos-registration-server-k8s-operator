@@ -40,13 +40,12 @@ The UUID of the model can be retrieved by running `juju show-model`.
 | Name | Type |
 |------|------|
 | [juju_application.cos_registration_server](https://registry.terraform.io/providers/juju/juju/latest/docs/resources/application) | resource |
-| [juju_model.model](https://registry.terraform.io/providers/juju/juju/latest/docs/data-sources/model) | data source |
 
 ## Inputs
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| model\_uuid | Name of the model to deploy to (must be a K8s model) | `string` | n/a | yes |
+| model\_uuid | UUID of the model to deploy to (must be a K8s model) | `string` | n/a | yes |
 | app\_name | Name to give the deployed application | `string` | `"cos-registration-server"` | no |
 | channel | Channel that the charm is deployed from | `string` | `"latest/edge"` | no |
 | config | Map of the charm configuration options | `map(string)` | `{}` | no |

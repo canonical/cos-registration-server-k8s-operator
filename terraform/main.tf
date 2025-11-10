@@ -1,5 +1,6 @@
 data "juju_model" "model" {
   name = var.model_uuid
+  owner = "admin"
 }
 
 resource "juju_application" "cos_registration_server" {

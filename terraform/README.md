@@ -16,8 +16,10 @@ Users should ensure that Terraform is aware of the `juju_model` dependency of th
 To deploy this module with its needed dependency, you can run:
 
 ```bash
-terraform apply -var="model_uuid=<MODEL_NAME>"
+terraform apply -var="model_uuid=<MODEL_UUID>"
 ```
+
+The UUID of the model can be retrieved by running `juju show-model`.
 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements

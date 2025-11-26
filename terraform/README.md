@@ -16,8 +16,10 @@ Users should ensure that Terraform is aware of the `juju_model` dependency of th
 To deploy this module with its needed dependency, you can run:
 
 ```bash
-terraform apply -var="model=<MODEL_NAME>"
+terraform apply -var="model_uuid=<MODEL_UUID>"
 ```
+
+The UUID of the model can be retrieved by running `juju show-model`.
 
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
@@ -25,13 +27,13 @@ terraform apply -var="model=<MODEL_NAME>"
 | Name | Version |
 |------|---------|
 | terraform | >= 1.5 |
-| juju | >= 0.14.0 |
+| juju | >= 1.0.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| juju | >= 0.14.0 |
+| juju | >= 1.0.0 |
 
 ## Resources
 
@@ -44,7 +46,7 @@ terraform apply -var="model=<MODEL_NAME>"
 
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
-| model | Name of the model to deploy to (must be a K8s model) | `string` | n/a | yes |
+| model\_uuid | UUID of the model to deploy to (must be a K8s model) | `string` | n/a | yes |
 | app\_name | Name to give the deployed application | `string` | `"cos-registration-server"` | no |
 | channel | Channel that the charm is deployed from | `string` | `"latest/edge"` | no |
 | config | Map of the charm configuration options | `map(string)` | `{}` | no |

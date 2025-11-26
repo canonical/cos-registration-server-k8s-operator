@@ -40,6 +40,7 @@ The UUID of the model can be retrieved by running `juju show-model`.
 | Name | Type |
 |------|------|
 | [juju_application.cos_registration_server](https://registry.terraform.io/providers/juju/juju/latest/docs/resources/application) | resource |
+| [juju_model.model](https://registry.terraform.io/providers/juju/juju/latest/docs/data-sources/model) | data source |
 
 ## Inputs
 

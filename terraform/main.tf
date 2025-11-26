@@ -1,6 +1,10 @@
+data "juju_model" "model" {
+  uuid = var.model_uuid
+}
+
 resource "juju_application" "cos_registration_server" {
   name       = var.app_name
-  model_uuid = var.model_uuid
+  model_uuid = data.juju_model.model.uuid
   # We always need this variable to be true in order
   # to be able to apply resources limits.
   trust = true

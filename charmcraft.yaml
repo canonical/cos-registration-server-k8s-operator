@@ -36,6 +36,8 @@ charm-libs:
     version: "0"
   - lib: tempo_coordinator_k8s.tracing
     version: "0"
+  - lib: data_platfrom_libs.data_interfaces
+    version: "0"
 
 containers:
   cos-registration-server:

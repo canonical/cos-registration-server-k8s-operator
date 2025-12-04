@@ -36,7 +36,7 @@ charm-libs:
     version: "0"
   - lib: tempo_coordinator_k8s.tracing
     version: "0"
-  - lib: data_platfrom_libs.data_interfaces
+  - lib: data_platform_libs.data_interfaces
     version: "0"
 
 containers:
@@ -75,6 +75,10 @@ requires:
     optional: true
     description: |
       Integration to send charm traces to a tracing backend.
+  database:
+    interface: postgresql_client
+    limit: 1
+    optional: false
 
 provides:
   grafana-dashboard:

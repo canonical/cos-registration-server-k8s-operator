@@ -290,7 +290,7 @@ async def test_postgresql(ops_test: OpsTest):
 
     relation_data = await _get_app_relation_data(app, "database", side=REQUIRES)
 
-    # no devices registered when testing
+    # Ensure PostgreSQL relation data contains required fields
     assert relation_data.get("endpoints")
     assert relation_data.get("username")
     assert relation_data.get("password")

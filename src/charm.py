@@ -393,12 +393,13 @@ class CosRegistrationServerCharm(CharmBase):
             except ExecError as e:
                 logger.error(f"Failed to setup the server: {e}")
 
-            new_layer = self._pebble_layer.to_dict()
+            new_layer = self._pebble_layer
+            new_layer_dict = new_layer.to_dict()
 
             # Get the current pebble layer config
             services = self.container.get_plan().to_dict().get("services", {})
-            if services != new_layer["services"]:  # pyright: ignore
-                self.container.add_layer(self.name, self._pebble_layer, combine=True)
+            if services != new_layer_dict["services"]:  # pyright: ignore
+                self.container.add_layer(self.name, new_layer, combine=True)
 
                 logger.info("Added updated layer 'COS registration server' to Pebble plan")
 

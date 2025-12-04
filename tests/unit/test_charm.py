@@ -34,7 +34,6 @@ class TestCharm(unittest.TestCase):
         self.name = "cos-registration-server"
 
         self.harness.set_model_name("testmodel")
-        self.harness.container_pebble_ready(self.name)
         self.harness.handle_exec(self.name, ["/usr/bin/install.bash"], result=0)
         self.harness.handle_exec(self.name, ["/usr/bin/configure.bash"], result=0)
 
@@ -42,7 +41,10 @@ class TestCharm(unittest.TestCase):
 
         self.external_host = "1.2.3.4"
         self.external_url = f"http://{self.external_host}/{self.harness._backend.model_name}-{self.harness._backend.app_name}"
-
+        self.database_user = "user"
+        self.database_password = "password"
+        self.database_endpoint = "db-host:5432"
+        self.database_url = f"postgres://{self.database_user}:{self.database_password}@{self.database_endpoint}/{self.name}"
         self.harness.set_leader(True)
         self.harness.begin()
 
@@ -75,12 +77,30 @@ class TestCharm(unittest.TestCase):
                             "SCRIPT_NAME": f"/{self.harness._backend.model_name}-{self.harness._backend.app_name}",
                             "COS_MODEL_NAME": f"{self.harness._backend.model_name}",
                             "CSRF_TRUSTED_ORIGINS": f"https://{self.external_host}",
+                            "DATABASE_URL": self.database_url,
                         },
                     }
                 },
             }
             # Simulate the container coming up and emission of pebble-ready event
             self.harness.container_pebble_ready(self.name)
+
+            # Define database relation data
+            database_relation_data = {
+                "endpoints": self.database_endpoint,
+                "username": self.database_user,
+                "password": self.database_password,
+            }
+
+            # Connect the database and apply the data
+            self.harness.db_relation_id = self.harness.add_relation("database", "postgresql")
+            self.harness.add_relation_unit(self.harness.db_relation_id, "postgresql/0")
+            self.harness.update_relation_data(
+                self.harness.db_relation_id,
+                "postgresql",
+                database_relation_data,
+            )
+
             # Get the plan now we've run PebbleReady
             updated_plan = self.harness.get_container_pebble_plan(self.name).to_dict()
             # Check we've got the plan we expected
@@ -341,6 +361,14 @@ class TestCharm(unittest.TestCase):
             f"{self.harness.charm.internal_url}/api/v1/applications/prometheus/alert_rules/"
         )
         self.assertEqual(self.harness.charm._stored.prometheus_alert_rules_hash, previous_hash)
+
+    def test_database_info_loader(self):
+        self.harness.charm._database_info_loader = Mock()
+        # Simulate the container coming up and emission of pebble-ready event
+        self.harness.container_pebble_ready(self.name)
+
+        # Applied once for the DB table setup and once to start the service
+        self.assertEqual(self.harness.charm._database_info_loader.call_count, 2)
 
 
 class TestMD5(unittest.TestCase):

@@ -38,7 +38,7 @@ class TestCharm(unittest.TestCase):
         self.harness.handle_exec(self.name, ["/usr/bin/install.bash"], result=0)
         self.harness.handle_exec(self.name, ["/usr/bin/configure.bash"], result=0)
 
-        self.harness.add_storage("database", attach=True)[0]
+        self.harness.add_storage("storage", attach=True)[0]
 
         self.external_host = "1.2.3.4"
         self.external_url = f"http://{self.external_host}/{self.harness._backend.model_name}-{self.harness._backend.app_name}"

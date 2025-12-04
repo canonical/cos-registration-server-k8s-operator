@@ -50,6 +50,8 @@ PROMETHEUS_SEND_REMOTE_WRITE = "send-remote-write"
 PROMETHEUS_RECEIVE_REMOTE_WRITE = "receive-remote-write"
 PROMETHEUS_APP = "prometheus-k8s"
 
+POSTGRESQL_APP = "postgresql-k8s"
+
 
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest):
@@ -122,6 +124,19 @@ async def test_build_and_deploy(ops_test: OpsTest):
     await ops_test.model.integrate(
         f"{APP_NAME}:tracing",
         f"{GRAFANA_AGENT_APP}:tracing-provider",
+    )
+
+    await ops_test.model.deploy(POSTGRESQL_APP, channel="14/stable", trust=True)
+    logger.info(
+        "Adding relation: %s:%s and %s:%s",
+        APP_NAME,
+        "database",
+        POSTGRESQL_APP,
+        "database",
+    )
+    await ops_test.model.integrate(
+        f"{APP_NAME}:database",
+        f"{POSTGRESQL_APP}:database",
     )
 
 
@@ -267,3 +282,16 @@ async def test_blackbox_devices(ops_test: OpsTest):
 
     # no devices registered when testing
     assert relation_data.get("scrape_probes")
+
+
+async def test_postgresql(ops_test: OpsTest):
+    """Test that the postgresql URL is integrated."""
+    app = ops_test.model.applications[APP_NAME]
+
+    relation_data = await _get_app_relation_data(app, "database", side=REQUIRES)
+
+    # no devices registered when testing
+    assert relation_data.get("endpoints")
+    assert relation_data.get("username")
+    assert relation_data.get("password")
+    assert relation_data.get("database")

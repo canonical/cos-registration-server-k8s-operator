@@ -562,6 +562,9 @@ class CosRegistrationServerCharm(CharmBase):
         integration_data: dict[str, str] = self.database.fetch_relation_data()[integration_id]
 
         endpoint = integration_data.get("endpoints", "").split(",")[0]
+        if not endpoint:
+            logger.warning("Database endpoint is missing or empty; cannot construct database URL.")
+            return ""
         database = self.database.database
         username = integration_data.get("username", "")
         password = integration_data.get("password", "")

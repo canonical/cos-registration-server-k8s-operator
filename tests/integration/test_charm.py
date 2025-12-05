@@ -287,12 +287,14 @@ async def test_blackbox_devices(ops_test: OpsTest):
 async def test_postgresql(ops_test: OpsTest):
     """Test that the postgresql URL is integrated."""
     app = ops_test.model.applications[APP_NAME]
+    database_app = ops_test.model.applications[POSTGRESQL_APP]
 
     relation_data = await _get_app_relation_data(app, "database", side=REQUIRES)
+    database_relation_data = await _get_app_relation_data(database_app, "database", side=PROVIDES)
 
     # Ensure PostgreSQL relation data contains required fields
     assert relation_data.get("database")
-    assert relation_data.get("endpoints")
+    assert database_relation_data.get("endpoints")
     requested_secrets = relation_data.get("requested-secrets")
     assert "username" in requested_secrets
     assert "password" in requested_secrets

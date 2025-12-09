@@ -566,8 +566,17 @@ class CosRegistrationServerCharm(CharmBase):
             logger.warning("Database endpoint is missing or empty; cannot construct database URL.")
             return ""
         database = self.database.database
-        username = integration_data.get("username", "")
-        password = integration_data.get("password", "")
+        if not database:
+            logger.warning("Database name is missing or empty; cannot construct database URL.")
+            return ""
+        username = integration_data.get("username")
+        if not username:
+            logger.warning("Database username is missing or empty; cannot construct database URL.")
+            return ""
+        password = integration_data.get("password")
+        if not password:
+            logger.warning("Database password is missing or empty; cannot construct database URL.")
+            return ""
 
         return f"postgres://{username}:{password}@{endpoint}/{database}"
 

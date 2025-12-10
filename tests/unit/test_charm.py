@@ -367,7 +367,9 @@ class TestCharm(unittest.TestCase):
         # Simulate the container coming up and emission of pebble-ready event
         self.harness.container_pebble_ready(self.name)
 
-        self.assertEqual(self.harness.model.unit.status, ops.BlockedStatus("Database not configured yet"))
+        self.assertEqual(
+            self.harness.model.unit.status, ops.BlockedStatus("Database not configured yet")
+        )
 
 
 class TestMD5(unittest.TestCase):

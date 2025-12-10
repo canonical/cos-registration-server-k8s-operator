@@ -51,6 +51,7 @@ PROMETHEUS_RECEIVE_REMOTE_WRITE = "receive-remote-write"
 PROMETHEUS_APP = "prometheus-k8s"
 
 POSTGRESQL_APP = "postgresql-k8s"
+POSTGRESQL_APP_CHANNEL = "14/stable"
 
 
 @pytest.mark.abort_on_fail
@@ -126,7 +127,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
         f"{GRAFANA_AGENT_APP}:tracing-provider",
     )
 
-    await ops_test.model.deploy(POSTGRESQL_APP, channel="14/stable", trust=True)
+    await ops_test.model.deploy(POSTGRESQL_APP, channel=POSTGRESQL_APP_CHANNEL, trust=True)
     logger.info(
         "Adding relation: %s:%s and %s:%s",
         APP_NAME,

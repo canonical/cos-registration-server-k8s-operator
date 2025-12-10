@@ -110,7 +110,7 @@ class CosRegistrationServerCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.name = "cos-registration-server"
-        self.database_url = None
+        self.database_url = ""
 
         if len(self.model.storages["storage"]) == 0:
             # Storage isn't available yet. Since storage becomes available early enough, no need
@@ -555,7 +555,7 @@ class CosRegistrationServerCharm(CharmBase):
         return endpoint
 
     def _database_info_loader(self) -> None:
-        self.database_url = None
+        self.database_url = ""
 
         if not self.database.is_resource_created():
             return

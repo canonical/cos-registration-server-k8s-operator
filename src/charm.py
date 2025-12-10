@@ -112,7 +112,7 @@ class CosRegistrationServerCharm(CharmBase):
         self.name = "cos-registration-server"
         self.database_url = ""
 
-        if len(self.model.storages["storage"]) == 0:
+        if len(self.model.storages["database"]) == 0:
             # Storage isn't available yet. Since storage becomes available early enough, no need
             # to observe storage-attached and complicate things; simply abort until it is ready.
             return

@@ -43,7 +43,7 @@ containers:
   cos-registration-server:
     resource: cos-registration-server-image
     mounts:
-      - storage: storage
+      - storage: database
         location: /server_data
 
 resources:
@@ -53,7 +53,7 @@ resources:
     upstream-source: ghcr.io/canonical/cos-registration-server:dev
 
 storage:
-  storage:
+  database:
     type: filesystem
 
 requires:

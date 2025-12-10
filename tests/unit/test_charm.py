@@ -362,13 +362,12 @@ class TestCharm(unittest.TestCase):
         )
         self.assertEqual(self.harness.charm._stored.prometheus_alert_rules_hash, previous_hash)
 
-    def test_database_info_loader(self):
-        self.harness.charm._database_info_loader = Mock()
+    def test_database_url_invalid_status(self):
+        self.harness.charm.database_url = None
         # Simulate the container coming up and emission of pebble-ready event
         self.harness.container_pebble_ready(self.name)
 
-        # Applied once for the DB table setup and once to start the service
-        self.assertEqual(self.harness.charm._database_info_loader.call_count, 2)
+        self.assertEqual(self.harness.model.unit.status, ops.BlockedStatus("Database not configured yet"))
 
 
 class TestMD5(unittest.TestCase):

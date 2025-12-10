@@ -42,7 +42,7 @@ from ops.charm import (
     CollectStatusEvent,
 )
 from ops.framework import StoredState
-from ops.model import ActiveStatus, MaintenanceStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ChangeError, ExecError, Layer
 
 from auth_devices_keys import AuthDevicesKeysProvider
@@ -110,6 +110,7 @@ class CosRegistrationServerCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.name = "cos-registration-server"
+        self.database_url = None
 
         if len(self.model.storages["storage"]) == 0:
             # Storage isn't available yet. Since storage becomes available early enough, no need
@@ -382,12 +383,15 @@ class CosRegistrationServerCharm(CharmBase):
         """Define and start a workload using the Pebble API."""
         self.unit.status = MaintenanceStatus("Assembling pod spec")
         if self.container.can_connect():
+            if not self.database_url:
+                self.unit.status = BlockedStatus("Database not configured yet")
+                return
             try:
                 if not self.container.exists("/server_data/secret_key"):
                     self.container.exec(["/usr/bin/install.bash"]).wait()
                 environment = {
                     "GRAFANA_DASHBOARD_PATH": "/server_data/grafana_dashboards",
-                    "DATABASE_URL": self._database_info_loader(),
+                    "DATABASE_URL": self.database_url,
                 }
                 self.container.exec(["/usr/bin/configure.bash"], environment=environment).wait()
             except ExecError as e:
@@ -447,7 +451,7 @@ class CosRegistrationServerCharm(CharmBase):
                             "SCRIPT_NAME": f"/{self.model.name}-{self.model.app.name}",
                             "COS_MODEL_NAME": f"{self.model.name}",
                             "CSRF_TRUSTED_ORIGINS": f"https://{self.external_host}",
-                            "DATABASE_URL": self._database_info_loader(),
+                            "DATABASE_URL": self.database_url,
                         },
                     }
                 },
@@ -550,12 +554,14 @@ class CosRegistrationServerCharm(CharmBase):
 
         return endpoint
 
-    def _database_info_loader(self) -> str:
+    def _database_info_loader(self) -> None:
+        self.database_url = None
+
         if not self.database.is_resource_created():
-            return ""
+            return
 
         if not (database_integrations := self.database.relations):
-            return ""
+            return
 
         integration_id = database_integrations[0].id
 
@@ -563,30 +569,33 @@ class CosRegistrationServerCharm(CharmBase):
 
         endpoint = integration_data.get("endpoints", "").split(",")[0]
         if not endpoint:
-            logger.warning("Database endpoint is missing or empty; cannot construct database URL.")
-            return ""
+            logger.error("Database endpoint is missing or empty; cannot construct database URL.")
+            return
         database = self.database.database
         if not database:
-            logger.warning("Database name is missing or empty; cannot construct database URL.")
-            return ""
+            logger.error("Database name is missing or empty; cannot construct database URL.")
+            return
         username = integration_data.get("username")
         if not username:
-            logger.warning("Database username is missing or empty; cannot construct database URL.")
-            return ""
+            logger.error("Database username is missing or empty; cannot construct database URL.")
+            return
         password = integration_data.get("password")
         if not password:
-            logger.warning("Database password is missing or empty; cannot construct database URL.")
-            return ""
+            logger.error("Database password is missing or empty; cannot construct database URL.")
+            return
 
-        return f"postgres://{username}:{password}@{endpoint}/{database}"
+        self.database_url = f"postgres://{username}:{password}@{endpoint}/{database}"
 
     def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
+        self._database_info_loader()
         self._update_layer_and_restart(None)
 
     def _on_database_endpoint_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
+        self._database_info_loader()
         self._update_layer_and_restart(None)
 
     def _on_database_relation_broken(self, _) -> None:
+        self._database_info_loader()
         self._update_layer_and_restart(None)
 
 

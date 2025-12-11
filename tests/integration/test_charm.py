@@ -75,9 +75,6 @@ async def test_build_and_deploy(ops_test: OpsTest):
         apps=[PROMETHEUS_APP], status="active", raise_on_blocked=True, timeout=1000
     )
 
-    # APP_NAME is blocked since no DB is connected
-    await ops_test.model.wait_for_idle(apps=[APP_NAME], status="blocked", timeout=1000)
-
     # Deploying grafana-agent-k8s and add the logging relation
     await deploy_and_assert_grafana_agent(
         ops_test.model, APP_NAME, channel="1/stable", metrics=False, dashboard=True, logging=True

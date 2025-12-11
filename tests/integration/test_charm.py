@@ -76,9 +76,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
     )
 
     # APP_NAME is blocked since no DB is connected
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME], status="blocked", timeout=1000
-    )
+    await ops_test.model.wait_for_idle(apps=[APP_NAME], status="blocked", timeout=1000)
 
     # Deploying grafana-agent-k8s and add the logging relation
     await deploy_and_assert_grafana_agent(

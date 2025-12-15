@@ -140,9 +140,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
         f"{POSTGRESQL_APP}:database",
     )
 
-    await ops_test.model.wait_for_idle(
-        apps=[APP_NAME], status="active", timeout=1000
-    )
+    await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=1000)
 
 
 async def test_status(ops_test):
@@ -192,12 +190,9 @@ async def test_loki_alert_rules_devices(ops_test: OpsTest):
     assert (
         "alert_rules" in relation_data
     ), f"{APP_LOKI_ALERT_RULE_FILES_DEVICES} relation is missing 'alert_rules'"  # fmt: skip
-    # Convert the Dict to a set of rules
-    relation_alert_rules = {
-        get_alert_rules_from_str(alert_rules)
-        for alert_rules in yaml.safe_load(relation_data["alert_rules"])
-    }
-    assert set(relation_alert_rules) == alert_rules
+
+    relation_alert_rules = get_alert_rules_from_str(relation_data["alert_rules"])
+    assert relation_alert_rules == alert_rules
 
 
 async def test_prometheus_alert_rules_devices(ops_test: OpsTest):
@@ -208,10 +203,11 @@ async def test_prometheus_alert_rules_devices(ops_test: OpsTest):
     alert_rules = get_alert_rule_from_files(PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES)
     logger.info("found alert rules: %s", alert_rules)
     relation_data = await _get_app_relation_data(
-        app, APP_PROMETHEUS_ALERT_RULE_FILES_DEVICES, side=PROVIDES
+        app, APP_PROMETHEUS_ALERT_RULE_FILES_DEVICES, side=REQUIRES
     )
-    # When no rules, prometheus doesn't send the key "alert_rules"
-    assert relation_data == {}
+
+    relation_alert_rules = get_alert_rules_from_str(relation_data["alert_rules"])
+    assert relation_alert_rules == alert_rules
 
 
 async def test_tracing(ops_test: OpsTest):

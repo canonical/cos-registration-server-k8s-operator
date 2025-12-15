@@ -250,9 +250,13 @@ class TestCharm(unittest.TestCase):
 
     @patch("requests.get")
     def test_get_loki_alert_rule_files_from_db_success(self, mock_get):
-        loki_alert = """group:
+        loki_alert = """groups:
+        - name: example
+          rules:
           - name: my-group
-            alert: my-alert"""
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
 
         mock_get.return_value.json.return_value = [{"uid": "my_alert", "rules": loki_alert}]
         result = self.harness.charm._get_alert_rule_files_from_db("loki")
@@ -266,9 +270,13 @@ class TestCharm(unittest.TestCase):
 
     @patch("requests.get")
     def test_update_loki_alert_rule_files_changed(self, mock_get):
-        loki_alert = """group:
+        loki_alert = """groups:
+        - name: example
+          rules:
           - name: my-group
-            alert: my-alert"""
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
         mock_get.return_value.json.return_value = [{"uid": "my_alert", "rules": loki_alert}]
         self.harness.charm._stored.loki_alert_rules_hash = ""
         self.harness.charm._update_loki_alert_rule_files_devices()
@@ -287,9 +295,13 @@ class TestCharm(unittest.TestCase):
 
     @patch("requests.get")
     def test_update_loki_alert_rules_files_not_changed(self, mock_get):
-        loki_alert = """group:
+        loki_alert = """groups:
+        - name: example
+          rules:
           - name: my-group
-            alert: my-alert"""
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
         mock_get.return_value.json.return_value = [{"uid": "my_rule", "rules": loki_alert}]
         self.harness.charm._stored.loki_alert_rules_hash = ""
         self.harness.charm._update_loki_alert_rule_files_devices()
@@ -307,9 +319,13 @@ class TestCharm(unittest.TestCase):
 
     @patch("requests.get")
     def test_get_prometheus_alert_rule_files_from_db_success(self, mock_get):
-        prometheus_alert = """group:
+        prometheus_alert = """groups:
+        - name: example
+          rules:
           - name: my-group
-            alert: my-alert"""
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
 
         mock_get.return_value.json.return_value = [{"uid": "my_alert", "rules": prometheus_alert}]
         result = self.harness.charm._get_alert_rule_files_from_db("prometheus")
@@ -323,9 +339,13 @@ class TestCharm(unittest.TestCase):
 
     @patch("requests.get")
     def test_update_prometheus_alert_rule_files_changed(self, mock_get):
-        prometheus_alert = """group:
+        prometheus_alert = """groups:
+        - name: example
+          rules:
           - name: my-group
-            alert: my-alert"""
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
         mock_get.return_value.json.return_value = [{"uid": "my_alert", "rules": prometheus_alert}]
         self.harness.charm._stored.prometheus_alert_rules_hash = ""
         self.harness.charm._update_prometheus_alert_rule_files_devices()
@@ -344,9 +364,13 @@ class TestCharm(unittest.TestCase):
 
     @patch("requests.get")
     def test_update_prometheus_alert_rule_files_not_changed(self, mock_get):
-        prometheus_alert = """group:
+        prometheus_alert = """groups:
+        - name: example
+          rules:
           - name: my-group
-            alert: my-alert"""
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
         mock_get.return_value.json.return_value = [{"uid": "my_rule", "rules": prometheus_alert}]
         self.harness.charm._stored.prometheus_alert_rules_hash = ""
         self.harness.charm._update_prometheus_alert_rule_files_devices()

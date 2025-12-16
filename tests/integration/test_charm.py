@@ -45,6 +45,20 @@ APP_PROMETHEUS_ALERT_RULE_FILES_DEVICES = "send-remote-write-alerts-devices"
 
 LOKI_ALERT_RULE_FILES_DIRECTORY_DEVICES = Path("./src/loki_alert_rules/devices")
 PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES = Path("./src/prometheus_alert_rules/devices")
+LOKI_ALERT_RULE_FILE = """groups:
+        - name: example
+          rules:
+          - name: my-group
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
+PROMETHEUS_ALERT_RULE_FILE = """groups:
+        - name: example
+          rules:
+          - name: my-group
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
 
 PROMETHEUS_SEND_REMOTE_WRITE = "send-remote-write"
 PROMETHEUS_RECEIVE_REMOTE_WRITE = "receive-remote-write"
@@ -54,12 +68,24 @@ POSTGRESQL_APP = "postgresql-k8s"
 POSTGRESQL_APP_CHANNEL = "14/stable"
 
 
+def create_alert_rule_files():
+    """Create alert rule files & directory if it does not exist."""
+    LOKI_ALERT_RULE_FILES_DIRECTORY_DEVICES.mkdir(parents=True, exist_ok=True)
+    PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES.mkdir(parents=True, exist_ok=True)
+    (LOKI_ALERT_RULE_FILES_DIRECTORY_DEVICES / "my_rule.rule").write_text(LOKI_ALERT_RULE_FILE)
+    (PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES / "my_rule.rule").write_text(
+        PROMETHEUS_ALERT_RULE_FILE
+    )
+
+
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest):
     """Build the charm-under-test and deploy it together with related charms.
 
     Assert on the unit status before any relations/configurations take place.
     """
+    create_alert_rule_files()
+
     # Build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
     resources = {RESOURCE_NAME: RESOURCE_PATH}

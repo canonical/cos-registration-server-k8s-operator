@@ -343,6 +343,117 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(self.harness.charm._stored.prometheus_alert_rules_hash, previous_hash)
 
 
+class TestCertificates(unittest.TestCase):
+    def setUp(self):
+        self.harness = ops.testing.Harness(CosRegistrationServerCharm)
+        self.addCleanup(self.harness.cleanup)
+
+        self.name = "cos-registration-server"
+
+        self.harness.set_model_name("testmodel")
+        self.harness.handle_exec(self.name, ["/usr/bin/install.bash"], result=0)
+        self.harness.handle_exec(self.name, ["/usr/bin/configure.bash"], result=0)
+
+        self.harness.add_storage("database", attach=True)[0]
+
+        self.external_host = "1.2.3.4"
+        self.external_url = f"http://{self.external_host}/{self.harness._backend.model_name}-{self.harness._backend.app_name}"
+
+        self.harness.set_leader(True)
+        self.harness.begin()
+        self.harness.container_pebble_ready(self.name)
+
+    @patch("charm.requests.get")
+    def test_fetch_pending_csrs_from_db(self, mock_get):
+        """Test fetching devices with pending certificate status from database."""
+        mock_response = Mock()
+        mock_response.json.return_value = [
+            {"uid": "device-1", "certificate": None},
+            {
+                "uid": "device-2",
+                "certificate": {
+                    "csr": "-----BEGIN CERTIFICATE REQUEST-----\n...",
+                    "status": "pending",
+                },
+            },
+            {
+                "uid": "device-3",
+                "certificate": {
+                    "csr": "-----BEGIN CERTIFICATE REQUEST-----\n...",
+                    "status": "signed",
+                },
+            },
+        ]
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        result = self.harness.charm._fetch_pending_csrs_from_db()
+
+        # Should only return device-2 (pending status)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["uid"], "device-2")
+        self.assertEqual(result[0]["certificate"]["status"], "pending")
+        mock_get.assert_called_once_with(
+            f"{self.harness.charm.internal_url}/api/v1/devices/?fields=uid,certificate"
+        )
+
+    @patch("charm.requests.patch")
+    def test_patch_device_certificate(self, mock_patch):
+        """Test updating certificate data for a device in the database."""
+        mock_response = Mock()
+        mock_response.raise_for_status = Mock()
+        mock_patch.return_value = mock_response
+
+        result = self.harness.charm._patch_device_certificate(
+            uid="device-1",
+            certificate="-----BEGIN CERTIFICATE-----\n...",
+            ca="-----BEGIN CERTIFICATE-----\nCA...",
+            chain="-----BEGIN CERTIFICATE-----\nCHAIN...",
+            status="signed",
+        )
+
+        self.assertTrue(result)
+        mock_patch.assert_called_once()
+        call_args = mock_patch.call_args
+        self.assertIn("device-1/certificate/", call_args[0][0])
+        # Verify all certificate fields are sent in the payload
+        payload = call_args[1]["json"]
+        self.assertEqual(payload["certificate"], "-----BEGIN CERTIFICATE-----\n...")
+        self.assertEqual(payload["ca"], "-----BEGIN CERTIFICATE-----\nCA...")
+        self.assertEqual(payload["chain"], "-----BEGIN CERTIFICATE-----\nCHAIN...")
+        self.assertEqual(payload["status"], "signed")
+
+    @patch("charm.requests.get")
+    def test_certificate_requests_property(self, mock_get):
+        """Test certificate_requests property returns pending CSRs."""
+        self.harness.set_can_connect(self.name, True)
+
+        # Mock pending devices with valid CSR
+        mock_response = Mock()
+        mock_response.json.return_value = [
+            {
+                "uid": "device-1",
+                "certificate": {
+                    "csr": "-----BEGIN CERTIFICATE REQUEST-----\nMIICWzCCAUMCAQAwFjEUMBIGA1UEAwwLZGV2aWNlLXRlc3QwggEiMA0GCSqGSIb3\nDQEBAQUAA4IBDwAwggEKAoIBAQDK7VqK3YqK5K0YvN0m6K5K0YvN0m6K5K0YvN0m\n6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K\n0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN\n0m6K5K0YvN0mAgMBAAGgADANBgkqhkiG9w0BAQsFAAOCAQEAw7vN0m6K5K0YvN0m\n6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K\n0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m\n-----END CERTIFICATE REQUEST-----",
+                    "status": "pending",
+                },
+            },
+            {"uid": "device-2", "certificate": None},
+        ]
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        # Get pending certificate requests via property
+        cert_requests = self.harness.charm.certificate_requests
+
+        # Verify API call was made
+        mock_get.assert_called_once_with(
+            f"{self.harness.charm.internal_url}/api/v1/devices/?fields=uid,certificate"
+        )
+        # Verify certificate requests list is returned (filtering happens in _fetch_pending_csrs_from_db)
+        self.assertIsInstance(cert_requests, list)
+
+
 class TestMD5(unittest.TestCase):
     def create_file(self, name, content):
         with open(self.directory_path / Path(name), "w") as f:

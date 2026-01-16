@@ -36,6 +36,8 @@ charm-libs:
     version: "0"
   - lib: tempo_coordinator_k8s.tracing
     version: "0"
+  - lib: tls_certificates_interface.tls_certificates
+    version: "4"
 
 containers:
   cos-registration-server:
@@ -48,7 +50,7 @@ resources:
   cos-registration-server-image:
     type: oci-image
     description: ubuntu 22 base image
-    upstream-source: ghcr.io/canonical/cos-registration-server:dev
+    upstream-source: ghcr.io/canonical/cos-registration-server:feat_add-api-for-device-ssc
 
 storage:
   database:
@@ -73,6 +75,12 @@ requires:
     optional: true
     description: |
       Integration to send charm traces to a tracing backend.
+  certificates:
+    interface: tls-certificates
+    limit: 1
+    optional: true
+    description: |
+      Integration to obtain TLS certificates for signing device CSRs.
 
 provides:
   grafana-dashboard:

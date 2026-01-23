@@ -342,27 +342,6 @@ class TestCharm(unittest.TestCase):
         )
         self.assertEqual(self.harness.charm._stored.prometheus_alert_rules_hash, previous_hash)
 
-
-class TestCertificates(unittest.TestCase):
-    def setUp(self):
-        self.harness = ops.testing.Harness(CosRegistrationServerCharm)
-        self.addCleanup(self.harness.cleanup)
-
-        self.name = "cos-registration-server"
-
-        self.harness.set_model_name("testmodel")
-        self.harness.handle_exec(self.name, ["/usr/bin/install.bash"], result=0)
-        self.harness.handle_exec(self.name, ["/usr/bin/configure.bash"], result=0)
-
-        self.harness.add_storage("database", attach=True)[0]
-
-        self.external_host = "1.2.3.4"
-        self.external_url = f"http://{self.external_host}/{self.harness._backend.model_name}-{self.harness._backend.app_name}"
-
-        self.harness.set_leader(True)
-        self.harness.begin()
-        self.harness.container_pebble_ready(self.name)
-
     @patch("charm.requests.get")
     def test_fetch_pending_csrs_from_db(self, mock_get):
         """Test fetching devices with pending certificate status from database."""

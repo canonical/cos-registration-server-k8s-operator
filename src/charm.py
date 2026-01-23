@@ -141,7 +141,6 @@ class CosRegistrationServerCharm(CharmBase):
             refresh_events=[self.on.update_status],
         )
 
-        # Observe certificate available event
         self.framework.observe(
             self.certificates.on.certificate_available,
             self._on_certificate_available,
@@ -422,12 +421,15 @@ class CosRegistrationServerCharm(CharmBase):
             logger.error(f"Failed to fetch auth devices keys from '{database_url}': {e}")
             return None
 
-    def _fetch_pending_csrs_from_db(self):
+    def _fetch_pending_csrs_from_db(self) -> Optional[List[dict]]:
         """Fetch devices with pending certificate status from the database.
 
         Returns:
             List of device dictionaries with uid and certificate data where status is pending,
             or None if the request fails.
+
+        Raises:
+            requests.exceptions.RequestException: If the HTTP request fails.
         """
         logger.info("Fetching pending CSRs from database")
         database_url = (
@@ -455,7 +457,7 @@ class CosRegistrationServerCharm(CharmBase):
 
     def _patch_device_certificate(
         self, uid: str, certificate: str, ca: str, chain: str, status: str
-    ):
+    ) -> bool:
         """Update the certificate data for a device in the database.
 
         Args:
@@ -467,6 +469,8 @@ class CosRegistrationServerCharm(CharmBase):
 
         Returns:
             True if successful, False otherwise
+        Raises:
+            requests.exceptions.RequestException: If the HTTP request fails.
         """
         logger.info(f"Patching certificate for device {uid} with status {status}")
         database_url = (
@@ -507,23 +511,23 @@ class CosRegistrationServerCharm(CharmBase):
         valid_certificate_requests = []
         for device in pending_devices_csrs:
             cert_data = device.get("certificate", {})
-            if cert_data.get("status") != "pending":
-                continue
 
             csr_pem = cert_data.get("csr")
             if not csr_pem:
                 logger.warning(f"Device {device.get('uid')} has no CSR")
                 continue
 
-            # Validate the CSR and if not valid, deny the request
+            # Validate the CSR and if not valid, set status to denied
             csr = CertificateSigningRequest.from_string(csr_pem)
             if not csr.common_name and not csr.sans_ip:
-                self._patch_device_certificate(
-                    uid=device.get("uid"), certificate="", ca="", chain="", status="denied"
-                )
+                device_uid = device.get("uid")
+                if device_uid:
+                    self._patch_device_certificate(
+                        uid=device_uid, certificate="", ca="", chain="", status="denied"
+                    )
                 continue
 
-            logger.info(f"Adding valid CSR for device {device.get('uid')}")
+            logger.debug(f"Adding valid CSR for device {device.get('uid')}")
             valid_certificate_requests.append(csr)
 
         logger.debug(f"Found {len(valid_certificate_requests)} pending certificate request(s)")
@@ -532,13 +536,15 @@ class CosRegistrationServerCharm(CharmBase):
     def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
         """Handle certificate available event.
 
-        This is called when a certificate has been signed and is available.
+        This is called when a certificate has been signed and it is available in the relation.
         We update the database with the signed certificate data.
 
         Args:
             event: The certificate available event
+        Raises:
+            requests.exceptions.RequestException: If the HTTP request fails.
         """
-        logger.info(
+        logger.debug(
             f"Certificate available for device: {event.certificate_signing_request.common_name}"
         )
 
@@ -549,33 +555,6 @@ class CosRegistrationServerCharm(CharmBase):
         if str(chain[0]) != str(event.certificate):
             chain.reverse()
         chain = "\n\n".join(chain)
-
-        # Verify device still has pending status before updating
-        database_url = (
-            self.internal_url
-            + COS_REGISTRATION_SERVER_API_URL_BASE
-            + "devices/?fields=uid,certificate"
-        )
-
-        try:
-            response = requests.get(database_url)
-            response.raise_for_status()
-            devices = response.json()
-
-            device = next((d for d in devices if d.get("uid") == device_uid), None)
-            if not device:
-                logger.warning(f"Device {device_uid} not found in database")
-                return
-
-            cert_data = device.get("certificate", {})
-            if cert_data.get("status") != "pending":
-                logger.info(
-                    f"Device {device_uid} certificate status is {cert_data.get('status')}, skipping update"
-                )
-                return
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to check device status for {device_uid}: {e}")
-            return
 
         # Update the database with the signed certificate
         if not self._patch_device_certificate(

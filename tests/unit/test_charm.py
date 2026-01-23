@@ -427,7 +427,7 @@ class TestCertificates(unittest.TestCase):
     def test_certificate_requests_property(self, mock_get):
         """Test certificate_requests property returns pending CSRs."""
         self.harness.set_can_connect(self.name, True)
-     
+
         valid_csr = """-----BEGIN CERTIFICATE REQUEST-----
 MIICujCCAaICAQAwdTELMAkGA1UEBhMCVVMxDTALBgNVBAgMBFRlc3QxDTALBgNV
 BAcMBFRlc3QxDTALBgNVBAoMBFRlc3QxDTALBgNVBAsMBFRlc3QxDDAKBgNVBAMM

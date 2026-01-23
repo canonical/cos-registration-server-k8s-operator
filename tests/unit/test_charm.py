@@ -217,7 +217,6 @@ class TestCharm(unittest.TestCase):
             f"{self.harness.charm.internal_url}/api/v1/applications/grafana/dashboards/"
         )
         self.assertNotEqual(self.harness.charm._stored.dashboard_dict_hash, "")
-        print(self.harness.charm._stored.dashboard_dict_hash)
         previous_hash = self.harness.charm._stored.dashboard_dict_hash
         mock_get.return_value.json.return_value = [
             {"uid": "my_dashboard", "dashboard": {"annotations": True, "dashboard": True}}
@@ -279,7 +278,6 @@ class TestCharm(unittest.TestCase):
         self.assertNotEqual(self.harness.charm._stored.loki_alert_rules_hash, "")
         previous_hash = self.harness.charm._stored.loki_alert_rules_hash
         self.harness.charm._update_loki_alert_rule_files_devices()
-        print(self.harness.charm._stored.loki_alert_rules_hash)
         mock_get.assert_called_with(
             f"{self.harness.charm.internal_url}/api/v1/applications/loki/alert_rules/"
         )
@@ -336,7 +334,6 @@ class TestCharm(unittest.TestCase):
         self.assertNotEqual(self.harness.charm._stored.prometheus_alert_rules_hash, "")
         previous_hash = self.harness.charm._stored.prometheus_alert_rules_hash
         self.harness.charm._update_prometheus_alert_rule_files_devices()
-        print(self.harness.charm._stored.prometheus_alert_rules_hash)
         mock_get.assert_called_with(
             f"{self.harness.charm.internal_url}/api/v1/applications/prometheus/alert_rules/"
         )
@@ -440,15 +437,12 @@ uv/5wRkaVmEeKdM+i2l2/Hro9IMuKiLh+cOX1m/f
         mock_response.raise_for_status = Mock()
         mock_get.return_value = mock_response
 
-        # Get pending certificate requests via property
         cert_requests = self.harness.charm.certificate_requests
-
-        # Verify API call was made
+        self.assertIsInstance(cert_requests, list)
+        self.assertEqual(len(cert_requests), 1)
         mock_get.assert_called_once_with(
             f"{self.harness.charm.internal_url}/api/v1/devices/?fields=uid,certificate"
         )
-        # Verify certificate requests list is returned (filtering happens in _fetch_pending_csrs_from_db)
-        self.assertIsInstance(cert_requests, list)
 
 
 class TestMD5(unittest.TestCase):

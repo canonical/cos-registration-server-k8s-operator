@@ -27,13 +27,13 @@ The UUID of the model can be retrieved by running `juju show-model`.
 | Name | Version |
 |------|---------|
 | terraform | >= 1.5 |
-| juju | >= 1.0.0 |
+| juju | ~> 1.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| juju | >= 1.0.0 |
+| juju | ~> 1.0 |
 
 ## Resources
 
@@ -53,7 +53,7 @@ The UUID of the model can be retrieved by running `juju show-model`.
 | constraints | String listing constraints for the application | `string` | `"arch=amd64"` | no |
 | resources | Resources used by the charm | `map(string)` | ```{ "cos-registration-server-image": "ghcr.io/canonical/cos-registration-server:dev" }``` | no |
 | revision | Revision number of the charm | `number` | `null` | no |
-| storage | Map of storage used by the application. Defaults to 1 GB, allocated by Juju | `map(string)` | `{}` | no |
+| storage\_directives | Map of storage used by the application. Defaults to 1 GB, allocated by Juju | `map(string)` | `{}` | no |
 | units | Unit count/scale | `number` | `1` | no |
 
 ## Outputs

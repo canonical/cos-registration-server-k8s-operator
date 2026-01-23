@@ -16,5 +16,5 @@ resource "juju_application" "cos_registration_server" {
   units              = var.units
   config             = var.config
   resources          = var.resources
-  storage_directives = var.storage
+  storage_directives = var.storage_directives
 }

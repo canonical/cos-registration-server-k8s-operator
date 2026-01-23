@@ -11,7 +11,7 @@ import socket
 import string
 from os import mkdir
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -28,10 +28,7 @@ from charms.tempo_coordinator_k8s.v0.tracing import (
     TracingEndpointRequirer,
 )
 from charms.tls_certificates_interface.v4.tls_certificates import (
-    CertificateRequestAttributes,
     CertificateSigningRequest,
-    Mode,
-    TLSCertificatesRequiresV4,
 )
 from charms.traefik_k8s.v2.ingress import (
     IngressPerAppRequirer,
@@ -47,6 +44,10 @@ from ops.model import ActiveStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ChangeError, ExecError, Layer
 
 from auth_devices_keys import AuthDevicesKeysProvider
+from src.tls_certificates_devices import (
+    CertificateAvailableEvent,
+    TLSCertificatesRequiresV4,
+)
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
@@ -54,6 +55,8 @@ logger = logging.getLogger(__name__)
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 COS_REGISTRATION_SERVER_API_URL_BASE = "/api/v1/"
+
+CERTIFICATES_RELATION_NAME = "certificates"
 
 
 def md5_update_from_file(filename, hash):
@@ -133,14 +136,14 @@ class CosRegistrationServerCharm(CharmBase):
 
         self.certificates = TLSCertificatesRequiresV4(
             charm=self,
-            relationship_name="certificates",
-            certificate_requests=self.certificate_requests,
-            mode=Mode.UNIT,
+            relationship_name=CERTIFICATES_RELATION_NAME,
+            certificate_signing_requests=self.certificate_requests,
             refresh_events=[self.on.update_status],
         )
 
+        # Observe certificate available event
         self.framework.observe(
-            self.certificates.on.certificate_available,  # pyright: ignore
+            self.certificates.on.certificate_available,
             self._on_certificate_available,
         )
 
@@ -426,6 +429,7 @@ class CosRegistrationServerCharm(CharmBase):
             List of device dictionaries with uid and certificate data where status is pending,
             or None if the request fails.
         """
+        logger.info("Fetching pending CSRs from database")
         database_url = (
             self.internal_url
             + COS_REGISTRATION_SERVER_API_URL_BASE
@@ -437,14 +441,14 @@ class CosRegistrationServerCharm(CharmBase):
             devices = response.json()
 
             # Filter to only return devices with pending certificate status
-            pending_devices = [
+            pending_devices_csrs = [
                 device
                 for device in devices
                 if device.get("certificate") is not None
                 and device.get("certificate", {}).get("status") == "pending"
             ]
-
-            return pending_devices
+            logger.info(f"Found {len(pending_devices_csrs)} device(s) with pending CSR")
+            return pending_devices_csrs
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to fetch devices from '{database_url}': {e}")
             return None
@@ -464,6 +468,7 @@ class CosRegistrationServerCharm(CharmBase):
         Returns:
             True if successful, False otherwise
         """
+        logger.info(f"Patching certificate for device {uid} with status {status}")
         database_url = (
             self.internal_url
             + COS_REGISTRATION_SERVER_API_URL_BASE
@@ -486,29 +491,20 @@ class CosRegistrationServerCharm(CharmBase):
             return False
 
     @property
-    def certificate_requests(self):
-        """Fetch pending CSRs from Django DB and return as CertificateRequestAttributes list.
+    def certificate_requests(self) -> List[CertificateSigningRequest]:
+        """Fetch pending CSRs from database.
 
-        This property is called by the TLS certificates library to get the current list of
-        certificate requests. It fetches devices with pending certificate status from the
-        database and converts them to CertificateRequestAttributes objects.
+        This property is called by the TLS certificates library.
+        It fetches pending certificates signing requests from the DB and validates them.
 
         Returns:
-            List[CertificateRequestAttributes]: List of certificate requests with pending status,
-            or fallback to existing relation data if DB fetch fails.
+            List[CertificateSigningRequest]: List of certificate request objects with pending status.
         """
         pending_devices_csrs = self._fetch_pending_csrs_from_db()
-
         if pending_devices_csrs is None:
-            # If we fail to fetch from DB, fallback to existing relation data
-            logger.warning(
-                "Could not reach database, falling back to existing certificate requests from relation data"
-            )
-            if hasattr(self, "certificates") and self.certificates:
-                return self.certificates.certificate_requests
             return []
 
-        certificate_requests = []
+        valid_certificate_requests = []
         for device in pending_devices_csrs:
             cert_data = device.get("certificate", {})
             if cert_data.get("status") != "pending":
@@ -519,44 +515,42 @@ class CosRegistrationServerCharm(CharmBase):
                 logger.warning(f"Device {device.get('uid')} has no CSR")
                 continue
 
-            try:
-                cert_request = CertificateSigningRequest.from_string(csr_pem)
-
-                cert_request_attributes = CertificateRequestAttributes.from_csr(
-                    cert_request, is_ca=False
+            # Validate the CSR and if not valid, deny the request
+            csr = CertificateSigningRequest.from_string(csr_pem)
+            if not csr.common_name and not csr.sans_ip:
+                self._patch_device_certificate(
+                    uid=device.get("uid"), certificate="", ca="", chain="", status="denied"
                 )
-
-                # Before sending certificate to the library we have to check
-                # whether the CSR is valid. This is because
-                # when we pass CSRs to the TLS library, it processes them in a for loop
-                # and if one is invalid it raises an exception and fails.
-                # If the certificate is invalid we set the device certificate status to denied.
-                if not cert_request_attributes.is_valid():
-                    logger.error(f"CSR for {cert_request_attributes.common_name} is invalid!")
-                    self._patch_device_certificate(
-                        uid=device.get("uid"), certificate="", ca="", chain="", status="denied"
-                    )
-                    continue
-                certificate_requests.append(cert_request_attributes)
-            except Exception as e:
-                logger.error(f"Failed to parse CSR for device {device.get('uid')}: {e}")
                 continue
 
-        logger.debug(f"Found {len(certificate_requests)} pending certificate request(s)")
-        return certificate_requests
+            logger.info(f"Adding valid CSR for device {device.get('uid')}")
+            valid_certificate_requests.append(csr)
 
-    def _on_certificate_available(self, event) -> None:
-        """Handle certificate_available event when a certificate is signed.
+        logger.debug(f"Found {len(valid_certificate_requests)} pending certificate request(s)")
+        return valid_certificate_requests
 
-        This method checks if the device status is still "pending" to ensure idempotency,
-        then sends the signed certificate data to the database and updates the relation.
+    def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
+        """Handle certificate available event.
+
+        This is called when a certificate has been signed and is available.
+        We update the database with the signed certificate data.
 
         Args:
-            event: CertificateAvailableEvent containing certificate data
+            event: The certificate available event
         """
-        device_uid = event.certificate_signing_request.common_name
+        logger.info(
+            f"Certificate available for device: {event.certificate_signing_request.common_name}"
+        )
 
-        # Check current device status for idempotency
+        device_uid = event.certificate_signing_request.common_name
+        certificate = str(event.certificate)
+        ca = str(event.ca) if event.ca else ""
+        chain = [str(certificate) for certificate in event.chain]
+        if str(chain[0]) != str(event.certificate):
+            chain.reverse()
+        chain = "\n\n".join(chain)
+
+        # Verify device still has pending status before updating
         database_url = (
             self.internal_url
             + COS_REGISTRATION_SERVER_API_URL_BASE
@@ -583,20 +577,12 @@ class CosRegistrationServerCharm(CharmBase):
             logger.error(f"Failed to check device status for {device_uid}: {e}")
             return
 
-        # Patch the Django API with certificate data
-        certificate = str(event.certificate)
-        ca = str(event.ca)
-        chain = "\n".join([str(cert) for cert in event.chain])
-
-        success = self._patch_device_certificate(
+        # Update the database with the signed certificate
+        if not self._patch_device_certificate(
             uid=device_uid, certificate=certificate, ca=ca, chain=chain, status="signed"
-        )
-
-        if success:
-            # Immediately reconcile the relation to remove the signed CSR
-            # The library will automatically sync on the next update_status event
-            logger.info(f"Updating certificate requests to remove signed CSR for {device_uid}")
-            self.certificates.certificate_requests = self.certificate_requests
+        ):
+            logger.error(f"Failed to update certificate for device {device_uid}")
+            return
 
     def _on_collect_status(self, event: CollectStatusEvent):
         event.add_status(self.blackbox_probes_provider.get_status())

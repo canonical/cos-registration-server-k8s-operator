@@ -427,6 +427,24 @@ class TestCertificates(unittest.TestCase):
     def test_certificate_requests_property(self, mock_get):
         """Test certificate_requests property returns pending CSRs."""
         self.harness.set_can_connect(self.name, True)
+     
+        valid_csr = """-----BEGIN CERTIFICATE REQUEST-----
+MIICujCCAaICAQAwdTELMAkGA1UEBhMCVVMxDTALBgNVBAgMBFRlc3QxDTALBgNV
+BAcMBFRlc3QxDTALBgNVBAoMBFRlc3QxDTALBgNVBAsMBFRlc3QxDDAKBgNVBAMM
+A2ZvbzEcMBoGCSqGSIb3DQEJARYNdGVzdEB0ZXN0LmNvbTCCASIwDQYJKoZIhvcN
+AQEBBQADggEPADCCAQoCggEBALG0zb43MgTji5sEGsiWXY8cFmcfsbVyL+H/7+VU
++UT5IW4EAVMr43WPGtJT9ts4lmN1AiI9Y3EJJA2v+/ySqdi4VfaWbES9CZuv0iE2
+n514kjErGpFNA0jwLTdyodOfixZZLY47tOq+lWr5rIpTR7XnW9//TCI5gZIC3TzB
+1Dn1SmkYfzqH/7X2W/ojzCOltjBjW8dM7IzwJ1gez2wcWlBcu8v4OXKRFbJ8nBao
+EsGSL06d6ARkJJ1PqZ+JUEfserXz8EOZPTcDAkHVuCAcu21u5dnp1bpL0WJKC9+N
+6E9b6L0BqQn3GF24Z6HkF8N8qbcbA69iwLhutNLSRRVQyIECAwEAAaAAMA0GCSqG
+SIb3DQEBCwUAA4IBAQB7RytS3IYkYAMLnYWP+A5blWFCzUkZykObxcXChzzwpekx
+4PWG9zlFmLRBZraaolv2I/++Cknv8pl7tvE3qnDLU4+MqY6weoEXyEhbi7MXchie
+AH+LoyVjvEHHAo46grYvF+qocIn4Ct++bmkY288HgIECZAsfB8hS3OVt4ylnoYr0
+ItwafNnlamyeBjdNNWIgpHfCw/97z0R6kmUlCMKWGf71VdLpq4gqZZuoZUedHmRY
+Ufqdch7rwup73OcYtwj/pyenBeMY6hUDPGE+LXs75HQRsX60dzRpRNYDBl/K3KDG
+uv/5wRkaVmEeKdM+i2l2/Hro9IMuKiLh+cOX1m/f
+-----END CERTIFICATE REQUEST-----"""
 
         # Mock pending devices with valid CSR
         mock_response = Mock()
@@ -434,7 +452,7 @@ class TestCertificates(unittest.TestCase):
             {
                 "uid": "device-1",
                 "certificate": {
-                    "csr": "-----BEGIN CERTIFICATE REQUEST-----\nMIICWzCCAUMCAQAwFjEUMBIGA1UEAwwLZGV2aWNlLXRlc3QwggEiMA0GCSqGSIb3\nDQEBAQUAA4IBDwAwggEKAoIBAQDK7VqK3YqK5K0YvN0m6K5K0YvN0m6K5K0YvN0m\n6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K\n0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN\n0m6K5K0YvN0mAgMBAAGgADANBgkqhkiG9w0BAQsFAAOCAQEAw7vN0m6K5K0YvN0m\n6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K\n0YvN0m6K5K0YvN0m6K5K0YvN0m6K5K0YvN0m\n-----END CERTIFICATE REQUEST-----",
+                    "csr": valid_csr,
                     "status": "pending",
                 },
             },

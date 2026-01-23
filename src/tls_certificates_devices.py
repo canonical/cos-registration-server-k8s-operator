@@ -18,9 +18,12 @@ from typing import List, Optional
 from charms.tls_certificates_interface.v4.tls_certificates import (
     CertificateAvailableEvent,
     CertificateSigningRequest,
+    CertificatesRequirerCharmEvents,
     DataValidationError,
     ProviderCertificate,
     RequirerCertificateRequest,
+    # Those should not be imported outside of this module, but are needed
+    # to ensure type safety with pydantic. Hence are imported to avoid code duplication.
     _CertificateSigningRequest,
     _ProviderApplicationData,
     _RequirerData,
@@ -30,12 +33,6 @@ from ops.charm import CharmEvents
 from ops.model import ModelError
 
 logger = logging.getLogger(__name__)
-
-
-class CertificatesRequirerCharmEvents(CharmEvents):
-    """List of events that the TLS Certificates requirer charm can leverage."""
-
-    certificate_available = EventSource(CertificateAvailableEvent)
 
 
 class TLSCertificatesRequiresV4(Object):
@@ -74,7 +71,7 @@ class TLSCertificatesRequiresV4(Object):
     def _configure(self, _: Optional[EventBase] = None):
         """Handle TLS Certificates Relation Data.
 
-        This method is called during any TLS relation event.
+        This method is called during TLS relation events.
         It will send certificate requests if they haven't been sent yet.
         It will find available certificates and emit events.
         """

@@ -44,7 +44,7 @@ from ops.model import ActiveStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ChangeError, ExecError, Layer
 
 from auth_devices_keys import AuthDevicesKeysProvider
-from src.tls_certificates_devices import (
+from tls_certificates_devices import (
     CertificateAvailableEvent,
     TLSCertificatesRequiresV4,
 )

@@ -40,3 +40,4 @@ jobs:
     secrets: inherit
     with:
       charmcraft-channel: latest/stable
+      default: "3.6/stable"

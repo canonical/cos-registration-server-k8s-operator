@@ -267,3 +267,25 @@ async def test_blackbox_devices(ops_test: OpsTest):
 
     # no devices registered when testing
     assert relation_data.get("scrape_probes")
+
+async def test_integrate_self_signed_certificates(ops_test: OpsTest):
+    await ops_test.model.deploy("self-signed-certificates", "self-signed-certificates", channel="1/stable", trust=True)
+
+    logger.info(
+        "Adding relation: %s:%s",
+        APP_NAME,
+        "certificates",
+    )
+
+    await ops_test.model.integrate(
+        f"{APP_NAME}:certificates",
+        "self-signed-certificates:certificates",
+    )
+
+    await ops_test.model.wait_for_idle(
+        apps=[
+            f"{APP_NAME}",
+            "self-signed-certificates",
+        ],
+        status="active",
+    )

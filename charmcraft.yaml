@@ -104,6 +104,13 @@ actions:
 
 parts:
   charm:
+    # Allow downloading pre-compiled binaries for cryptography.
+    # cryptography is a dependency of the tls_interface library
+    # used by this charm. Without this part, the build fails
+    # bas it tries to compile it from source, which would require
+    # build deps such as such as libssl-dev.
+    charm-binary-python-packages:
+      - cryptography
     build-snaps: [rustup]
     override-build: |
       rustup default stable

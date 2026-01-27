@@ -18,4 +18,4 @@ jobs:
     secrets:
       CHARMHUB_TOKEN: ${{ secrets.CHARMHUB_TOKEN }}
     with:
-      juju-channel: "3.6/stable"
+      juju-channel: "3/stable"

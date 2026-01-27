@@ -421,12 +421,12 @@ class CosRegistrationServerCharm(CharmBase):
             logger.error(f"Failed to fetch auth devices keys from '{database_url}': {e}")
             return None
 
-    def _fetch_pending_csrs_from_db(self) -> Optional[List[dict]]:
+    def _fetch_pending_csrs_from_db(self) -> List[dict]:
         """Fetch devices with pending certificate status from the database.
 
         Returns:
             List of device dictionaries with uid and certificate data where status is pending,
-            or None if the request fails.
+            or an empty list if the request fails.
 
         Raises:
             requests.exceptions.RequestException: If the HTTP request fails.
@@ -453,7 +453,7 @@ class CosRegistrationServerCharm(CharmBase):
             return pending_devices_csrs
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to fetch devices from '{database_url}': {e}")
-            return None
+            return []
 
     def _patch_device_certificate(
         self, uid: str, certificate: str, ca: str, chain: str, status: str
@@ -505,8 +505,6 @@ class CosRegistrationServerCharm(CharmBase):
             List[CertificateSigningRequest]: List of certificate request objects with pending status.
         """
         pending_devices_csrs = self._fetch_pending_csrs_from_db()
-        if pending_devices_csrs is None:
-            return []
 
         valid_certificate_requests = []
         for device in pending_devices_csrs:

@@ -1,4 +1,4 @@
-ops ~= 2.4
+ops ~=3.5
 requests
 # blackbox_exporter_k8s/v0/blackbox_probes.py
 cosl

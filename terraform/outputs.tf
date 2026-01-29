@@ -3,6 +3,17 @@ output "app_name" {
   description = "The name of the deployed application"
 }
 
+output "provides" {
+  value = {
+    auth_devices_keys         = "auth-devices-keys"
+    grafana_dashboard         = "grafana-dashboard"
+    grafana_dashboard_devices = "grafana-dashboard-devices"
+    probes                    = "probes"
+    probes_devices            = "probes-devices"
+  }
+  description = "Map of the integration endpoints provided by the application"
+}
+
 output "requires" {
   value = {
     catalogue                        = "catalogue"
@@ -13,15 +24,4 @@ output "requires" {
     tracing                          = "tracing"
   }
   description = "Map of the integration endpoints required by the application"
-}
-
-output "provides" {
-  value = {
-    auth_devices_keys         = "auth-devices-keys"
-    grafana_dashboard         = "grafana-dashboard"
-    grafana_dashboard_devices = "grafana-dashboard-devices"
-    probes                    = "probes"
-    probes_devices            = "probes-devices"
-  }
-  description = "Map of the integration endpoints provided by the application"
 }

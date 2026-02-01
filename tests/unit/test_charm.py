@@ -34,7 +34,6 @@ class TestCharm(unittest.TestCase):
         self.name = "cos-registration-server"
 
         self.harness.set_model_name("testmodel")
-        self.harness.container_pebble_ready(self.name)
         self.harness.handle_exec(self.name, ["/usr/bin/install.bash"], result=0)
         self.harness.handle_exec(self.name, ["/usr/bin/configure.bash"], result=0)
 
@@ -42,7 +41,10 @@ class TestCharm(unittest.TestCase):
 
         self.external_host = "1.2.3.4"
         self.external_url = f"http://{self.external_host}/{self.harness._backend.model_name}-{self.harness._backend.app_name}"
-
+        self.database_user = "user"
+        self.database_password = "password"
+        self.database_endpoint = "db-host:5432"
+        self.database_url = f"postgres://{self.database_user}:{self.database_password}@{self.database_endpoint}/{self.name}"
         self.harness.set_leader(True)
         self.harness.begin()
 
@@ -75,12 +77,30 @@ class TestCharm(unittest.TestCase):
                             "SCRIPT_NAME": f"/{self.harness._backend.model_name}-{self.harness._backend.app_name}",
                             "COS_MODEL_NAME": f"{self.harness._backend.model_name}",
                             "CSRF_TRUSTED_ORIGINS": f"https://{self.external_host}",
+                            "DATABASE_URL": self.database_url,
                         },
                     }
                 },
             }
             # Simulate the container coming up and emission of pebble-ready event
             self.harness.container_pebble_ready(self.name)
+
+            # Define database relation data
+            database_relation_data = {
+                "endpoints": self.database_endpoint,
+                "username": self.database_user,
+                "password": self.database_password,
+            }
+
+            # Connect the database and apply the data
+            self.harness.db_relation_id = self.harness.add_relation("database", "postgresql")
+            self.harness.add_relation_unit(self.harness.db_relation_id, "postgresql/0")
+            self.harness.update_relation_data(
+                self.harness.db_relation_id,
+                "postgresql",
+                database_relation_data,
+            )
+
             # Get the plan now we've run PebbleReady
             updated_plan = self.harness.get_container_pebble_plan(self.name).to_dict()
             # Check we've got the plan we expected
@@ -230,9 +250,13 @@ class TestCharm(unittest.TestCase):
 
     @patch("requests.get")
     def test_get_loki_alert_rule_files_from_db_success(self, mock_get):
-        loki_alert = """group:
+        loki_alert = """groups:
+        - name: example
+          rules:
           - name: my-group
-            alert: my-alert"""
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
 
         mock_get.return_value.json.return_value = [{"uid": "my_alert", "rules": loki_alert}]
         result = self.harness.charm._get_alert_rule_files_from_db("loki")
@@ -246,9 +270,13 @@ class TestCharm(unittest.TestCase):
 
     @patch("requests.get")
     def test_update_loki_alert_rule_files_changed(self, mock_get):
-        loki_alert = """group:
+        loki_alert = """groups:
+        - name: example
+          rules:
           - name: my-group
-            alert: my-alert"""
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
         mock_get.return_value.json.return_value = [{"uid": "my_alert", "rules": loki_alert}]
         self.harness.charm._stored.loki_alert_rules_hash = ""
         self.harness.charm._update_loki_alert_rule_files_devices()
@@ -267,9 +295,13 @@ class TestCharm(unittest.TestCase):
 
     @patch("requests.get")
     def test_update_loki_alert_rules_files_not_changed(self, mock_get):
-        loki_alert = """group:
+        loki_alert = """groups:
+        - name: example
+          rules:
           - name: my-group
-            alert: my-alert"""
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
         mock_get.return_value.json.return_value = [{"uid": "my_rule", "rules": loki_alert}]
         self.harness.charm._stored.loki_alert_rules_hash = ""
         self.harness.charm._update_loki_alert_rule_files_devices()
@@ -287,9 +319,13 @@ class TestCharm(unittest.TestCase):
 
     @patch("requests.get")
     def test_get_prometheus_alert_rule_files_from_db_success(self, mock_get):
-        prometheus_alert = """group:
+        prometheus_alert = """groups:
+        - name: example
+          rules:
           - name: my-group
-            alert: my-alert"""
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
 
         mock_get.return_value.json.return_value = [{"uid": "my_alert", "rules": prometheus_alert}]
         result = self.harness.charm._get_alert_rule_files_from_db("prometheus")
@@ -303,9 +339,13 @@ class TestCharm(unittest.TestCase):
 
     @patch("requests.get")
     def test_update_prometheus_alert_rule_files_changed(self, mock_get):
-        prometheus_alert = """group:
+        prometheus_alert = """groups:
+        - name: example
+          rules:
           - name: my-group
-            alert: my-alert"""
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
         mock_get.return_value.json.return_value = [{"uid": "my_alert", "rules": prometheus_alert}]
         self.harness.charm._stored.prometheus_alert_rules_hash = ""
         self.harness.charm._update_prometheus_alert_rule_files_devices()
@@ -324,9 +364,13 @@ class TestCharm(unittest.TestCase):
 
     @patch("requests.get")
     def test_update_prometheus_alert_rule_files_not_changed(self, mock_get):
-        prometheus_alert = """group:
+        prometheus_alert = """groups:
+        - name: example
+          rules:
           - name: my-group
-            alert: my-alert"""
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
         mock_get.return_value.json.return_value = [{"uid": "my_rule", "rules": prometheus_alert}]
         self.harness.charm._stored.prometheus_alert_rules_hash = ""
         self.harness.charm._update_prometheus_alert_rule_files_devices()
@@ -341,6 +385,15 @@ class TestCharm(unittest.TestCase):
             f"{self.harness.charm.internal_url}/api/v1/applications/prometheus/alert_rules/"
         )
         self.assertEqual(self.harness.charm._stored.prometheus_alert_rules_hash, previous_hash)
+
+    def test_database_url_invalid_status(self):
+        self.harness.charm.database_url = None
+        # Simulate the container coming up and emission of pebble-ready event
+        self.harness.container_pebble_ready(self.name)
+
+        self.assertEqual(
+            self.harness.model.unit.status, ops.BlockedStatus("Database not configured yet")
+        )
 
 
 class TestMD5(unittest.TestCase):

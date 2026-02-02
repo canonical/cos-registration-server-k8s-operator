@@ -25,14 +25,34 @@ jobs:
         output-method: inject
         git-push: "true"
 
-  terraform-lint:
+  terraform-validate:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-      with:
-        ref: ${{ github.event.pull_request.head.ref }}
-    - name: Lint Terraform
-      uses: actionshub/terraform-lint@main
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y tox
+        sudo snap install terraform --classic
+    - name: Validate Terraform
+      run: |
+        tox -e terraform-validate
+
+  terraform-test:
+    needs: terraform-validate
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y tox
+        sudo snap install terraform --classic
+        sudo snap install concierge --classic
+        sudo concierge prepare --preset microk8s
+    - name: Test Terraform
+      run: |
+        tox -e terraform-test
 
   pull-request:
     name: PR

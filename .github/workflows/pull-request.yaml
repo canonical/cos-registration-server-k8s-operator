@@ -60,3 +60,4 @@ jobs:
     secrets: inherit
     with:
       charmcraft-channel: latest/stable
+      juju-channel: 3.6/stable

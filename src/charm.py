@@ -523,7 +523,6 @@ class CosRegistrationServerCharm(CharmBase):
                 logger.error(
                     f"Failed to get tracing endpoint with protocol 'otlp_http'.\nError: {e}"
                 )
-                pass
 
         return endpoint
 

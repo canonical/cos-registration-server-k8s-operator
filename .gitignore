@@ -8,8 +8,6 @@ cos-tool-amd64
 .charm_tracing_buffer.raw
 .tox/
 *.egg-info/
-src/loki_alert_rules/devices/
-src/prometheus_alert_rules/devices/
 
 # Terraform
 .terraform/

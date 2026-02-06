@@ -515,15 +515,15 @@ class CosRegistrationServerCharm(CharmBase):
     def tracing_endpoint(self) -> Optional[str]:
         """Tempo endpoint for charm tracing."""
         endpoint = None
-        if hasattr(self, "tracing_endpoint_requirer") and self.tracing_endpoint_requirer:
-            if self.tracing_endpoint_requirer.is_ready():
-                try:
-                    endpoint = self.tracing_endpoint_requirer.get_endpoint("otlp_http")
-                except ProtocolNotRequestedError as e:
-                    logger.error(
-                        f"Failed to get tracing endpoint with protocol 'otlp_http'.\nError: {e}"
-                    )
-                    pass
+        requirer = getattr(self, "tracing_endpoint_requirer", None)
+        if requirer and requirer.is_ready():
+            try:
+                endpoint = requirer.get_endpoint("otlp_http")
+            except ProtocolNotRequestedError as e:
+                logger.error(
+                    f"Failed to get tracing endpoint with protocol 'otlp_http'.\nError: {e}"
+                )
+                pass
 
         return endpoint
 

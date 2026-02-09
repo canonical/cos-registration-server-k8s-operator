@@ -2,6 +2,13 @@
 *.charm
 *.pyc
 
+# Test and build artifacts
+.coverage
+cos-tool-amd64
+.charm_tracing_buffer.raw
+.tox/
+*.egg-info/
+
 # Terraform
 .terraform/
 *.tfstate

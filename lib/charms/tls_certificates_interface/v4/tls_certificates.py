@@ -1806,9 +1806,9 @@ class TLSCertificatesRequiresV4(Object):
     def renew_certificate(self, certificate: ProviderCertificate) -> None:
         """Request the renewal of the provided certificate."""
         certificate_signing_request = certificate.certificate_signing_request
-        secret_label = self._get_csr_secret_label(certificate_signing_request)
+        label = self._get_csr_secret_label(certificate_signing_request)
         try:
-            secret = self.model.get_secret(label=secret_label)
+            secret = self.model.get_secret(label=label)
         except SecretNotFoundError:
             logger.warning("No matching secret found - Skipping renewal")
             return
@@ -2131,16 +2131,16 @@ class TLSCertificatesRequiresV4(Object):
         provider_certificates = self.get_provider_certificates()
         for provider_certificate in provider_certificates:
             if provider_certificate.certificate_signing_request in csrs:
-                secret_label = self._get_csr_secret_label(
+                label = self._get_csr_secret_label(
                     provider_certificate.certificate_signing_request
                 )
                 if provider_certificate.revoked:
                     with suppress(SecretNotFoundError):
                         logger.debug(
                             "Removing secret with label %s",
-                            secret_label,
+                            label,
                         )
-                        secret = self.model.get_secret(label=secret_label)
+                        secret = self.model.get_secret(label=label)
                         secret.remove_all_revisions()
                 else:
                     if not self._csr_matches_certificate_request(
@@ -2150,14 +2150,14 @@ class TLSCertificatesRequiresV4(Object):
                         logger.debug("Certificate requested for different attributes - Skipping")
                         continue
                     try:
-                        secret = self.model.get_secret(label=secret_label)
-                        logger.debug("Setting secret with label %s", secret_label)
+                        secret = self.model.get_secret(label=label)
+                        logger.debug("Setting secret with label %s", label)
                         # Juju < 3.6 will create a new revision even if the content is the same
                         if secret.get_content(refresh=True).get("certificate", "") == str(
                             provider_certificate.certificate
                         ):
                             logger.debug(
-                                "Secret %s with correct certificate already exists", secret_label
+                                "Secret %s with correct certificate already exists", label
                             )
                             continue
                         secret.set_content(
@@ -2174,13 +2174,13 @@ class TLSCertificatesRequiresV4(Object):
                         )
                         secret.get_content(refresh=True)
                     except SecretNotFoundError:
-                        logger.debug("Creating new secret with label %s", secret_label)
+                        logger.debug("Creating new secret with label %s", label)
                         secret = self.charm.unit.add_secret(
                             content={
                                 "certificate": str(provider_certificate.certificate),
                                 "csr": str(provider_certificate.certificate_signing_request),
                             },
-                            label=secret_label,
+                            label=label,
                             expire=calculate_relative_datetime(
                                 target_time=provider_certificate.certificate.expiry_time,
                                 fraction=self.renewal_relative_time,

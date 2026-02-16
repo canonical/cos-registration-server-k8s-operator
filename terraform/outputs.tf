@@ -23,6 +23,7 @@ output "requires" {
     logging_alerts_devices           = "logging-alerts-devices"
     send_remote_write_alerts_devices = "send-remote-write-alerts-devices"
     tracing                          = "tracing"
+    certificates                     = "tls-certificates"
   }
   description = "Map of the integration endpoints required by the application"
 }

@@ -7,7 +7,7 @@ run "basic_deploy" {
 
   # Test requires integration endpoints - check count
   assert {
-    condition     = length(module.cos_registration_server_k8s.requires) == 7
+    condition     = length(module.cos_registration_server_k8s.requires) == 8
     error_message = "Expected 6 required integration endpoints"
   }
 
@@ -47,6 +47,11 @@ run "basic_deploy" {
     error_message = "requires output is missing 'database' endpoint"
   }
 
+  assert {
+    condition     = contains(keys(module.cos_registration_server_k8s.requires), "certificates")
+    error_message = "requires output is missing 'certificates' endpoint"
+  }
+
   # Test requires integration endpoints - check exact values
   assert {
     condition     = module.cos_registration_server_k8s.requires["catalogue"] == "catalogue"
@@ -81,6 +86,11 @@ run "basic_deploy" {
   assert {
     condition     = module.cos_registration_server_k8s.requires["database"] == "database"
     error_message = "requires.database endpoint did not match expected value"
+  }
+
+  assert {
+    condition     = module.cos_registration_server_k8s.requires["certificates"] == "tls-certificates"
+    error_message = "requires.certificates endpoint did not match expected value"
   }
 
   # Test provides integration endpoints - check count

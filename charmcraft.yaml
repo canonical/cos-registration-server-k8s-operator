@@ -52,7 +52,7 @@ resources:
   cos-registration-server-image:
     type: oci-image
     description: ubuntu 22 base image
-    upstream-source: ghcr.io/canonical/cos-registration-server:feat_add-api-for-device-ssc
+    upstream-source: ghcr.io/canonical/cos-registration-server:dev
 
 storage:
   database:

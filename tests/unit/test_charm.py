@@ -486,6 +486,7 @@ uv/5wRkaVmEeKdM+i2l2/Hro9IMuKiLh+cOX1m/f
         self.assertEqual(len(cert_requests), 1)
         mock_get.assert_called_once_with(
             f"{self.harness.charm.internal_url}/api/v1/devices/?fields=uid,certificate"
+        )
 
     def test_database_url_invalid_status(self):
         self.harness.charm.database_url = None

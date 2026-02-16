@@ -11,7 +11,7 @@ import socket
 import string
 from os import mkdir
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -32,6 +32,9 @@ from charms.tempo_coordinator_k8s.v0.tracing import (
     ProtocolNotRequestedError,
     TracingEndpointRequirer,
 )
+from charms.tls_certificates_interface.v4.tls_certificates import (
+    CertificateSigningRequest,
+)
 from charms.traefik_k8s.v2.ingress import (
     IngressPerAppRequirer,
 )
@@ -46,6 +49,10 @@ from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingSta
 from ops.pebble import ChangeError, ExecError, Layer
 
 from auth_devices_keys import AuthDevicesKeysProvider
+from tls_certificates_devices import (
+    CertificateAvailableEvent,
+    TLSCertificatesRequiresV4,
+)
 
 # Log messages can be retrieved using juju debug-log
 logger = logging.getLogger(__name__)
@@ -54,6 +61,7 @@ VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 COS_REGISTRATION_SERVER_API_URL_BASE = "/api/v1/"
 
+CERTIFICATES_RELATION_NAME = "certificates"
 DATABASE_RELATION_NAME = "database"
 
 
@@ -132,6 +140,18 @@ class CosRegistrationServerCharm(CharmBase):
         self.framework.observe(self.ingress.on.revoked, self._on_ingress_revoked)
         self.framework.observe(self.on.update_status, self._on_update_status)
         self.framework.observe(self.on.collect_app_status, self._on_collect_status)
+
+        self.certificates = TLSCertificatesRequiresV4(
+            charm=self,
+            relationship_name=CERTIFICATES_RELATION_NAME,
+            certificate_signing_requests=self.certificate_requests,
+            refresh_events=[self.on.update_status],
+        )
+
+        self.framework.observe(
+            self.certificates.on.certificate_available,
+            self._on_certificate_available,
+        )
 
         self.framework.observe(
             self.on.cos_registration_server_pebble_ready, self._update_layer_and_restart
@@ -426,6 +446,146 @@ class CosRegistrationServerCharm(CharmBase):
         except requests.exceptions.RequestException as e:
             logger.error(f"Failed to fetch auth devices keys from '{database_url}': {e}")
             return None
+
+    def _fetch_pending_csrs_from_db(self) -> List[dict]:
+        """Fetch devices with pending certificate status from the database.
+
+        Returns:
+            List of device dictionaries with uid and certificate data where status is pending,
+            or an empty list if the request fails.
+
+        Raises:
+            requests.exceptions.RequestException: If the HTTP request fails.
+        """
+        logger.info("Fetching pending CSRs from database")
+        database_url = (
+            self.internal_url
+            + COS_REGISTRATION_SERVER_API_URL_BASE
+            + "devices/?fields=uid,certificate"
+        )
+        try:
+            response = requests.get(database_url)
+            response.raise_for_status()
+            devices = response.json()
+
+            # Filter to only return devices with pending certificate status
+            pending_devices_csrs = [
+                device
+                for device in devices
+                if device.get("certificate") is not None
+                and device.get("certificate", {}).get("status") == "pending"
+            ]
+            logger.info(f"Found {len(pending_devices_csrs)} device(s) with pending CSR")
+            return pending_devices_csrs
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to fetch devices from '{database_url}': {e}")
+            return []
+
+    def _patch_device_certificate(
+        self, uid: str, certificate: str, ca: str, chain: str, status: str
+    ) -> bool:
+        """Update the certificate data for a device in the database.
+
+        Args:
+            uid: The unique ID of the device
+            certificate: The signed certificate content
+            ca: The CA certificate
+            chain: The certificate chain
+            status: The new certificate status (default: "signed")
+
+        Returns:
+            True if successful, False otherwise
+        Raises:
+            requests.exceptions.RequestException: If the HTTP request fails.
+        """
+        logger.info(f"Patching certificate for device {uid} with status {status}")
+        database_url = (
+            self.internal_url
+            + COS_REGISTRATION_SERVER_API_URL_BASE
+            + f"devices/{uid}/certificate/"
+        )
+        payload = {
+            "certificate": certificate,
+            "ca": ca,
+            "chain": chain,
+            "status": status,
+        }
+
+        try:
+            response = requests.patch(database_url, json=payload)
+            response.raise_for_status()
+            logger.info(f"Updated certificate for device {uid} with status {status}")
+            return True
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to update certificate for device {uid}: {e}")
+            return False
+
+    @property
+    def certificate_requests(self) -> List[CertificateSigningRequest]:
+        """Fetch pending CSRs from database.
+
+        This property is called by the TLS certificates library.
+        It fetches pending certificates signing requests from the DB and validates them.
+
+        Returns:
+            List[CertificateSigningRequest]: List of certificate request objects with pending status.
+        """
+        pending_devices_csrs = self._fetch_pending_csrs_from_db()
+
+        valid_certificate_requests = []
+        for device in pending_devices_csrs:
+            cert_data = device.get("certificate", {})
+
+            csr_pem = cert_data.get("csr")
+            if not csr_pem:
+                logger.warning(f"Device {device.get('uid')} has no CSR")
+                continue
+
+            # Validate the CSR and if not valid, set status to denied
+            csr = CertificateSigningRequest.from_string(csr_pem)
+            if not csr.common_name and not csr.sans_ip:
+                device_uid = device.get("uid")
+                if device_uid:
+                    self._patch_device_certificate(
+                        uid=device_uid, certificate="", ca="", chain="", status="denied"
+                    )
+                continue
+
+            logger.debug(f"Adding valid CSR for device {device.get('uid')}")
+            valid_certificate_requests.append(csr)
+
+        logger.debug(f"Found {len(valid_certificate_requests)} pending certificate request(s)")
+        return valid_certificate_requests
+
+    def _on_certificate_available(self, event: CertificateAvailableEvent) -> None:
+        """Handle certificate available event.
+
+        This is called when a certificate has been signed and it is available in the relation.
+        We update the database with the signed certificate data.
+
+        Args:
+            event: The certificate available event
+        Raises:
+            requests.exceptions.RequestException: If the HTTP request fails.
+        """
+        logger.debug(
+            f"Certificate available for device: {event.certificate_signing_request.common_name}"
+        )
+
+        device_uid = event.certificate_signing_request.common_name
+        certificate = str(event.certificate)
+        ca = str(event.ca) if event.ca else ""
+        chain = [str(certificate) for certificate in event.chain]
+        if str(chain[0]) != str(event.certificate):
+            chain.reverse()
+        chain = "\n\n".join(chain)
+
+        # Update the database with the signed certificate
+        if not self._patch_device_certificate(
+            uid=device_uid, certificate=certificate, ca=ca, chain=chain, status="signed"
+        ):
+            logger.error(f"Failed to update certificate for device {device_uid}")
+            return
 
     def _on_collect_status(self, event: CollectStatusEvent):
         event.add_status(self.blackbox_probes_provider.get_status())

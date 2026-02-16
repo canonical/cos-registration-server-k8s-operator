@@ -36,6 +36,8 @@ charm-libs:
     version: "0"
   - lib: tempo_coordinator_k8s.tracing
     version: "0"
+  - lib: tls_certificates_interface.tls_certificates
+    version: "4"
   - lib: data_platform_libs.data_interfaces
     version: "0"
 
@@ -75,6 +77,12 @@ requires:
     optional: true
     description: |
       Integration to send charm traces to a tracing backend.
+  certificates:
+    interface: tls-certificates
+    limit: 1
+    optional: true
+    description: |
+      Integration to obtain TLS certificates for signing device CSRs.
   database:
     interface: postgresql_client
     limit: 1
@@ -102,6 +110,13 @@ actions:
 
 parts:
   charm:
+    # Allow downloading pre-compiled binaries for cryptography.
+    # cryptography is a dependency of the tls_interface library
+    # used by this charm. Without this part, the build fails
+    # bas it tries to compile it from source, which would require
+    # build deps such as such as libssl-dev.
+    charm-binary-python-packages:
+      - cryptography
     build-snaps: [rustup]
     override-build: |
       rustup default stable

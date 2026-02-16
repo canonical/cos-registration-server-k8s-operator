@@ -1,5 +1,7 @@
 ops ~= 2.4
 requests
+# tls_certificates_interface/v4/tls_certificates.py
+cryptography
 # blackbox_exporter_k8s/v0/blackbox_probes.py
 cosl
 pyyaml

@@ -17,6 +17,7 @@ output "provides" {
 output "requires" {
   value = {
     catalogue                        = "catalogue"
+    database                         = "database"
     ingress                          = "ingress"
     logging                          = "logging"
     logging_alerts_devices           = "logging-alerts-devices"

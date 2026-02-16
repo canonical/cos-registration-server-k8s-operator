@@ -17,6 +17,11 @@ from urllib.parse import urlparse
 import requests
 from charms.blackbox_exporter_k8s.v0.blackbox_probes import BlackboxProbesProvider
 from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
+from charms.data_platform_libs.v0.data_interfaces import (
+    DatabaseCreatedEvent,
+    DatabaseEndpointsChangedEvent,
+    DatabaseRequires,
+)
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v1.loki_push_api import LogForwarder, LokiPushApiConsumer
 from charms.prometheus_k8s.v1.prometheus_remote_write import (
@@ -40,7 +45,7 @@ from ops.charm import (
     CollectStatusEvent,
 )
 from ops.framework import StoredState
-from ops.model import ActiveStatus, MaintenanceStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ChangeError, ExecError, Layer
 
 from auth_devices_keys import AuthDevicesKeysProvider
@@ -57,6 +62,7 @@ VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 COS_REGISTRATION_SERVER_API_URL_BASE = "/api/v1/"
 
 CERTIFICATES_RELATION_NAME = "certificates"
+DATABASE_RELATION_NAME = "database"
 
 
 def md5_update_from_file(filename, hash):
@@ -112,6 +118,7 @@ class CosRegistrationServerCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.name = "cos-registration-server"
+        self.database_url = ""
 
         if len(self.model.storages["database"]) == 0:
             # Storage isn't available yet. Since storage becomes available early enough, no need
@@ -227,6 +234,18 @@ class CosRegistrationServerCharm(CharmBase):
         self.prometheus_alerts_remote_write_consumer_devices.topology = None  # pyright: ignore
 
         self.tracing_endpoint_requirer = TracingEndpointRequirer(self)
+
+        self.database = DatabaseRequires(
+            self, relation_name=DATABASE_RELATION_NAME, database_name=self.name
+        )
+        self.framework.observe(self.database.on.database_created, self._on_database_created)
+        self.framework.observe(
+            self.database.on.endpoints_changed, self._on_database_endpoint_changed
+        )
+        self.framework.observe(
+            self.on[DATABASE_RELATION_NAME].relation_broken,
+            self._on_database_relation_broken,
+        )
 
     def _on_ingress_ready(self, _) -> None:
         """Once Traefik tells us our external URL, make sure we reconfigure the charm."""
@@ -384,20 +403,27 @@ class CosRegistrationServerCharm(CharmBase):
         """Define and start a workload using the Pebble API."""
         self.unit.status = MaintenanceStatus("Assembling pod spec")
         if self.container.can_connect():
+            if not self.database_url:
+                self.unit.status = BlockedStatus("Database not configured yet")
+                return
             try:
                 if not self.container.exists("/server_data/secret_key"):
                     self.container.exec(["/usr/bin/install.bash"]).wait()
-                environment = {"GRAFANA_DASHBOARD_PATH": "/server_data/grafana_dashboards"}
+                environment = {
+                    "GRAFANA_DASHBOARD_PATH": "/server_data/grafana_dashboards",
+                    "DATABASE_URL": self.database_url,
+                }
                 self.container.exec(["/usr/bin/configure.bash"], environment=environment).wait()
             except ExecError as e:
                 logger.error(f"Failed to setup the server: {e}")
 
-            new_layer = self._pebble_layer.to_dict()
+            new_layer = self._pebble_layer
+            new_layer_dict = new_layer.to_dict()
 
             # Get the current pebble layer config
             services = self.container.get_plan().to_dict().get("services", {})
-            if services != new_layer["services"]:  # pyright: ignore
-                self.container.add_layer(self.name, self._pebble_layer, combine=True)
+            if services != new_layer_dict["services"]:  # pyright: ignore
+                self.container.add_layer(self.name, new_layer, combine=True)
 
                 logger.info("Added updated layer 'COS registration server' to Pebble plan")
 
@@ -585,6 +611,7 @@ class CosRegistrationServerCharm(CharmBase):
                             "SCRIPT_NAME": f"/{self.model.name}-{self.model.app.name}",
                             "COS_MODEL_NAME": f"{self.model.name}",
                             "CSRF_TRUSTED_ORIGINS": f"https://{self.external_host}",
+                            "DATABASE_URL": self.database_url,
                         },
                     }
                 },
@@ -686,6 +713,50 @@ class CosRegistrationServerCharm(CharmBase):
                 )
 
         return endpoint
+
+    def _database_info_loader(self) -> None:
+        self.database_url = ""
+
+        if not self.database.is_resource_created():
+            return
+
+        if not (database_integrations := self.database.relations):
+            return
+
+        integration_id = database_integrations[0].id
+
+        integration_data: dict[str, str] = self.database.fetch_relation_data()[integration_id]
+
+        endpoint = integration_data.get("endpoints", "").split(",")[0]
+        if not endpoint:
+            logger.error("Database endpoint is missing or empty; cannot construct database URL.")
+            return
+        database = self.database.database
+        if not database:
+            logger.error("Database name is missing or empty; cannot construct database URL.")
+            return
+        username = integration_data.get("username")
+        if not username:
+            logger.error("Database username is missing or empty; cannot construct database URL.")
+            return
+        password = integration_data.get("password")
+        if not password:
+            logger.error("Database password is missing or empty; cannot construct database URL.")
+            return
+
+        self.database_url = f"postgres://{username}:{password}@{endpoint}/{database}"
+
+    def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
+        self._database_info_loader()
+        self._update_layer_and_restart(None)
+
+    def _on_database_endpoint_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
+        self._database_info_loader()
+        self._update_layer_and_restart(None)
+
+    def _on_database_relation_broken(self, _) -> None:
+        self._database_info_loader()
+        self._update_layer_and_restart(None)
 
 
 if __name__ == "__main__":  # pragma: nocover

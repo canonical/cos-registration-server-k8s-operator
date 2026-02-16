@@ -45,10 +45,37 @@ APP_PROMETHEUS_ALERT_RULE_FILES_DEVICES = "send-remote-write-alerts-devices"
 
 LOKI_ALERT_RULE_FILES_DIRECTORY_DEVICES = Path("./src/loki_alert_rules/devices")
 PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES = Path("./src/prometheus_alert_rules/devices")
+LOKI_ALERT_RULE_FILE = """groups:
+        - name: example
+          rules:
+          - name: my-group
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
+PROMETHEUS_ALERT_RULE_FILE = """groups:
+        - name: example
+          rules:
+          - name: my-group
+            alert: my-alert
+            expr: up == 0
+            for: 5m"""
 
 PROMETHEUS_SEND_REMOTE_WRITE = "send-remote-write"
 PROMETHEUS_RECEIVE_REMOTE_WRITE = "receive-remote-write"
 PROMETHEUS_APP = "prometheus-k8s"
+
+POSTGRESQL_APP = "postgresql-k8s"
+POSTGRESQL_APP_CHANNEL = "14/stable"
+
+
+def create_alert_rule_files():
+    """Create alert rule files & directory if it does not exist."""
+    LOKI_ALERT_RULE_FILES_DIRECTORY_DEVICES.mkdir(parents=True, exist_ok=True)
+    PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES.mkdir(parents=True, exist_ok=True)
+    (LOKI_ALERT_RULE_FILES_DIRECTORY_DEVICES / "my_rule.rule").write_text(LOKI_ALERT_RULE_FILE)
+    (PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES / "my_rule.rule").write_text(
+        PROMETHEUS_ALERT_RULE_FILE
+    )
 
 
 @pytest.mark.abort_on_fail
@@ -57,6 +84,8 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
     Assert on the unit status before any relations/configurations take place.
     """
+    create_alert_rule_files()
+
     # Build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
     resources = {RESOURCE_NAME: RESOURCE_PATH}
@@ -69,7 +98,7 @@ async def test_build_and_deploy(ops_test: OpsTest):
 
     # and wait for active/idle status
     await ops_test.model.wait_for_idle(
-        apps=[APP_NAME, PROMETHEUS_APP], status="active", raise_on_blocked=True, timeout=1000
+        apps=[PROMETHEUS_APP], status="active", raise_on_blocked=True, timeout=1000
     )
 
     # Deploying grafana-agent-k8s and add the logging relation
@@ -124,6 +153,21 @@ async def test_build_and_deploy(ops_test: OpsTest):
         f"{GRAFANA_AGENT_APP}:tracing-provider",
     )
 
+    await ops_test.model.deploy(POSTGRESQL_APP, channel=POSTGRESQL_APP_CHANNEL, trust=True)
+    logger.info(
+        "Adding relation: %s:%s and %s:%s",
+        APP_NAME,
+        "database",
+        POSTGRESQL_APP,
+        "database",
+    )
+    await ops_test.model.integrate(
+        f"{APP_NAME}:database",
+        f"{POSTGRESQL_APP}:database",
+    )
+
+    await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=1000)
+
 
 async def test_status(ops_test):
     """Assert on the unit status."""
@@ -172,12 +216,9 @@ async def test_loki_alert_rules_devices(ops_test: OpsTest):
     assert (
         "alert_rules" in relation_data
     ), f"{APP_LOKI_ALERT_RULE_FILES_DEVICES} relation is missing 'alert_rules'"  # fmt: skip
-    # Convert the Dict to a set of rules
-    relation_alert_rules = {
-        get_alert_rules_from_str(alert_rules)
-        for alert_rules in yaml.safe_load(relation_data["alert_rules"])
-    }
-    assert set(relation_alert_rules) == alert_rules
+
+    relation_alert_rules = get_alert_rules_from_str(relation_data["alert_rules"])
+    assert relation_alert_rules == alert_rules
 
 
 async def test_prometheus_alert_rules_devices(ops_test: OpsTest):
@@ -188,10 +229,11 @@ async def test_prometheus_alert_rules_devices(ops_test: OpsTest):
     alert_rules = get_alert_rule_from_files(PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES)
     logger.info("found alert rules: %s", alert_rules)
     relation_data = await _get_app_relation_data(
-        app, APP_PROMETHEUS_ALERT_RULE_FILES_DEVICES, side=PROVIDES
+        app, APP_PROMETHEUS_ALERT_RULE_FILES_DEVICES, side=REQUIRES
     )
-    # When no rules, prometheus doesn't send the key "alert_rules"
-    assert relation_data == {}
+
+    relation_alert_rules = get_alert_rules_from_str(relation_data["alert_rules"])
+    assert relation_alert_rules == alert_rules
 
 
 async def test_tracing(ops_test: OpsTest):
@@ -292,3 +334,19 @@ async def test_integrate_self_signed_certificates(ops_test: OpsTest):
         ],
         status="active",
     )
+
+
+async def test_postgresql(ops_test: OpsTest):
+    """Test that the postgresql URL is integrated."""
+    app = ops_test.model.applications[APP_NAME]
+    database_app = ops_test.model.applications[POSTGRESQL_APP]
+
+    relation_data = await _get_app_relation_data(app, "database", side=REQUIRES)
+    database_relation_data = await _get_app_relation_data(database_app, "database", side=PROVIDES)
+
+    # Ensure PostgreSQL relation data contains required fields
+    assert relation_data.get("database")
+    assert database_relation_data.get("endpoints")
+    requested_secrets = relation_data.get("requested-secrets")
+    assert "username" in requested_secrets
+    assert "password" in requested_secrets

@@ -38,6 +38,8 @@ charm-libs:
     version: "0"
   - lib: tls_certificates_interface.tls_certificates
     version: "4"
+  - lib: data_platform_libs.data_interfaces
+    version: "0"
 
 containers:
   cos-registration-server:
@@ -81,6 +83,10 @@ requires:
     optional: true
     description: |
       Integration to obtain TLS certificates for signing device CSRs.
+  database:
+    interface: postgresql_client
+    limit: 1
+    optional: false
 
 provides:
   grafana-dashboard:

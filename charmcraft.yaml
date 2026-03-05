@@ -47,8 +47,8 @@ containers:
 resources:
   cos-registration-server-image:
     type: oci-image
-    description: ubuntu 22 base image
-    upstream-source: ghcr.io/canonical/cos-registration-server:dev
+    description: Ubuntu 22 base image
+    upstream-source: ghcr.io/canonical/cos-registration-server:track_0
 
 storage:
   database:

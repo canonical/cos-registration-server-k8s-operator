@@ -9,7 +9,7 @@ variable "channel" {
   description = "Channel that the charm is deployed from"
   type        = string
   nullable    = false
-  default     = "latest/edge"
+  default     = "0/stable"
 }
 
 variable "config" {
@@ -36,7 +36,7 @@ variable "resources" {
   description = "Resources used by the charm"
   type        = map(string)
   default = {
-    cos-registration-server-image : "ghcr.io/canonical/cos-registration-server:dev"
+    cos-registration-server-image : "ghcr.io/canonical/cos-registration-server:track_0"
   }
 }
 

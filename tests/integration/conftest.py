@@ -1,4 +1,5 @@
 import logging
+import os
 import pathlib
 import subprocess
 from collections.abc import Generator
@@ -42,15 +43,6 @@ from tests.integration.constants import (
 logger = logging.getLogger(__name__)
 
 
-def pytest_addoption(parser: pytest.Parser) -> None:
-    parser.addoption(
-        "--charm-file",
-        action="store",
-        default=None,
-        help="Use an existing built charm instead of packing",
-    )
-
-
 def alert_rule_files() -> None:
     """Create alert rule files & directory if it does not exist."""
     LOKI_ALERT_RULE_FILES_DIRECTORY_DEVICES.mkdir(parents=True, exist_ok=True)
@@ -74,6 +66,13 @@ def pytest_sessionstart(session):
     grafana_dashboards_files()
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @pytest.fixture(scope="module")
 def juju(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, None, None]:
     """Pytest fixture that wraps :meth:`jubilant.with_model`."""
@@ -83,21 +82,21 @@ def juju(request: pytest.FixtureRequest) -> Generator[jubilant.Juju, None, None]
             log = juju.debug_log(limit=1000)
             print(log, end="")
 
-    use_existing = request.config.getoption("--use-existing", default=False)
+    use_existing = _env_flag("JUJU_USE_EXISTING", default=False)
     if use_existing:
         juju = jubilant.Juju()
         yield juju
         show_debug_log(juju)
         return
 
-    model = request.config.getoption("--model")
+    model = os.environ.get("JUJU_MODEL")
     if model:
         juju = jubilant.Juju(model=model)
         yield juju
         show_debug_log(juju)
         return
 
-    keep_models = cast(bool, request.config.getoption("--keep-models"))
+    keep_models = _env_flag("JUJU_KEEP_MODELS", default=False)
     with jubilant.temp_model(keep=keep_models) as juju:
         juju.wait_timeout = 10 * 60
         yield juju
@@ -255,9 +254,9 @@ def app_fixture(
 
 
 @pytest.fixture(scope="session")
-def charm_file(metadata: Dict[str, Any], pytestconfig: pytest.Config):
+def charm_file(metadata: Dict[str, Any]):
     """Pytest fixture that packs the charm and returns the filename, or --charm-file if set."""
-    charm_file = pytestconfig.getoption("--charm-file")
+    charm_file = os.environ.get("CHARM_FILE")
     if charm_file:
         return charm_file
 

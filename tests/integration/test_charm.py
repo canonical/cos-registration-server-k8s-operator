@@ -5,7 +5,6 @@
 import logging
 
 import jubilant
-import pytest
 
 from tests.integration.constants import (
     APP_CERTIFICATES,

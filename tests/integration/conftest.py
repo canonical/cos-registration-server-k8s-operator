@@ -149,7 +149,10 @@ def app_fixture(
         POSTGRESQL_APP,
         POSTGRESQL_DATABASE,
     )
-    juju.integrate(app_name, f"{POSTGRESQL_APP}:{POSTGRESQL_DATABASE}")
+    juju.integrate(
+        f"{app_name}:{APP_DATABASE}",
+        f"{POSTGRESQL_APP}:{POSTGRESQL_DATABASE}",
+    )
 
     logger.info(
         "Adding relation: %s:%s and %s:%s",

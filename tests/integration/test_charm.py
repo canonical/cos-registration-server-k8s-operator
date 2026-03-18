@@ -66,7 +66,6 @@ SSC_UNIT = f"{SSC_APP}/0"
 POSTGRESQL_UNIT = f"{POSTGRESQL_APP}/0"
 
 
-@pytest.mark.abort_on_fail
 def test_deploy(cos_registration_server: str, juju):
     """Assert the deployment reaches active status."""
     wait_for_active_idle_without_error(juju)

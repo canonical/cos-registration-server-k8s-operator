@@ -2,7 +2,7 @@ import pathlib
 
 import yaml
 
-METADATA = yaml.safe_load(pathlib.Path("./charmcraft.yaml").read_text())
+METADATA = yaml.safe_load(pathlib.Path("./charmcraft.yaml").read_text(encoding="UTF-8"))
 RESOURCE_NAME = "cos-registration-server-image"
 APP_NAME = METADATA["name"]
 

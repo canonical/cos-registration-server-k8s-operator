@@ -20,7 +20,6 @@ LOKI_ALERT_RULE_FILES_DIRECTORY_DEVICES = pathlib.Path("./src/loki_alert_rules/d
 PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES = pathlib.Path(
     "./src/prometheus_alert_rules/devices"
 )
-GRAFANA_DASHBOARD_FILES_DIRECTORY_DEVICES = pathlib.Path("./src/grafana_dashboards/devices")
 LOKI_ALERT_RULE_FILE = """groups:
         - name: example
           rules:
@@ -35,6 +34,8 @@ PROMETHEUS_ALERT_RULE_FILE = """groups:
             alert: my-alert
             expr: up == 0
             for: 5m"""
+
+GRAFANA_DASHBOARD_FILES_DIRECTORY_DEVICES = pathlib.Path("./src/grafana_dashboards/devices")
 GRAFANA_DASHBOARD_FILE = """{
   "title": "Example Dashboard",
   "schemaVersion": 36,

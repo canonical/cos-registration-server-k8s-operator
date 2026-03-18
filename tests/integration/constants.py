@@ -43,8 +43,6 @@ GRAFANA_DASHBOARD_FILE = """{
   "panels": []
 }"""
 
-GRAFANA_DASHBOARD_FILES_DIRECTORY_DEVICES = pathlib.Path("./src/grafana_dashboards/devices/")
-
 PROMETHEUS_RECEIVE_REMOTE_WRITE = "receive-remote-write"
 PROMETHEUS_APP = "prometheus-k8s"
 

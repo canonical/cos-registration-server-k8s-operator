@@ -3,7 +3,7 @@ import os
 import pathlib
 import subprocess
 from collections.abc import Generator
-from typing import Any, Dict, cast
+from typing import Any, Dict
 
 import jubilant
 import pytest

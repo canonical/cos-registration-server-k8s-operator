@@ -233,26 +233,15 @@ def app_fixture(
     juju.integrate(f"{app_name}:{APP_CERTIFICATES}", f"{SSC_APP}:{SSC_CERTIFICATES}")
 
     juju.wait(
-        lambda status: jubilant.all_active(status, PROMETHEUS_APP),
-        timeout=1000,
-    )
-    juju.wait(
-        lambda status: jubilant.all_active(status, POSTGRESQL_APP),
-        timeout=1000,
-    )
-    juju.wait(
-        lambda status: jubilant.all_active(status, BLACKBOX_APP),
+        lambda status: jubilant.all_active(
+            status, PROMETHEUS_APP, POSTGRESQL_APP, BLACKBOX_PROBES, SSC_APP, app_name
+        ),
         timeout=1000,
     )
 
-    juju.wait(
-        lambda status: jubilant.all_active(status, SSC_APP),
-        timeout=1000,
-    )
-
-    juju.wait(lambda status: jubilant.all_active(status, app_name), timeout=1000)
-    # we do not wait for grafana_agent_app since it's
+    # grafana_agent_app is
     # in a blocked state by design.
+    juju.wait(lambda status: jubilant.all_blocked(status, GRAFANA_AGENT_APP), timeout=1000)
 
     return app_name
 

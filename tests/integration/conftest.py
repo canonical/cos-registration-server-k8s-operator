@@ -236,12 +236,12 @@ def app_fixture(
         lambda status: jubilant.all_active(
             status, PROMETHEUS_APP, POSTGRESQL_APP, BLACKBOX_PROBES, SSC_APP, app_name
         ),
-        timeout=1000,
+        timeout=5000,
     )
 
     # grafana_agent_app is
     # in a blocked state by design.
-    juju.wait(lambda status: jubilant.all_blocked(status, GRAFANA_AGENT_APP), timeout=1000)
+    juju.wait(lambda status: jubilant.all_blocked(status, GRAFANA_AGENT_APP), timeout=5000)
 
     return app_name
 

@@ -234,7 +234,7 @@ def app_fixture(
 
     juju.wait(
         lambda status: jubilant.all_active(
-            status, PROMETHEUS_APP, POSTGRESQL_APP, BLACKBOX_PROBES, SSC_APP, app_name
+            status, PROMETHEUS_APP, POSTGRESQL_APP, BLACKBOX_APP, SSC_APP, app_name
         ),
         timeout=5000,
     )

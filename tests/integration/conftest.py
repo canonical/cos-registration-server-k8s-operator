@@ -20,6 +20,7 @@ from tests.integration.constants import (
     APP_TRACING,
     BLACKBOX_APP,
     BLACKBOX_PROBES,
+    COS_CHANNEL,
     GRAFANA_AGENT_APP,
     GRAFANA_AGENT_GRAFANA_DASHBOARD,
     GRAFANA_AGENT_LOGGING_PROVIDER,
@@ -134,13 +135,13 @@ def app_fixture(
         trust=True,
     )
 
-    juju.deploy(PROMETHEUS_APP, channel="1/stable", trust=True)
+    juju.deploy(PROMETHEUS_APP, channel=COS_CHANNEL, trust=True)
 
-    juju.deploy(GRAFANA_AGENT_APP, channel="1/stable")
+    juju.deploy(GRAFANA_AGENT_APP, channel=COS_CHANNEL)
 
-    juju.deploy(BLACKBOX_APP, channel="1/stable", trust=True)
+    juju.deploy(BLACKBOX_APP, channel=COS_CHANNEL, trust=True)
 
-    juju.deploy(SSC_APP, channel="1/stable", trust=True)
+    juju.deploy(SSC_APP, channel=COS_CHANNEL, trust=True)
 
     logger.info(
         "Adding relation: %s:%s and %s:%s",

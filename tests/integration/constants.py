@@ -45,6 +45,7 @@ GRAFANA_DASHBOARD_FILE = """{
 
 PROMETHEUS_RECEIVE_REMOTE_WRITE = "receive-remote-write"
 PROMETHEUS_APP = "prometheus-k8s"
+COS_CHANNEL = "1/stable"
 
 POSTGRESQL_APP = "postgresql-k8s"
 POSTGRESQL_APP_CHANNEL = "14/stable"

@@ -403,6 +403,7 @@ class CosRegistrationServerCharm(CharmBase):
         """Define and start a workload using the Pebble API."""
         self.unit.status = MaintenanceStatus("Assembling pod spec")
         if self.container.can_connect():
+            self._database_info_loader()
             if not self.database_url:
                 self.unit.status = BlockedStatus("Database not configured yet")
                 return
@@ -747,15 +748,12 @@ class CosRegistrationServerCharm(CharmBase):
         self.database_url = f"postgres://{username}:{password}@{endpoint}/{database}"
 
     def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
-        self._database_info_loader()
         self._update_layer_and_restart(None)
 
     def _on_database_endpoint_changed(self, event: DatabaseEndpointsChangedEvent) -> None:
-        self._database_info_loader()
         self._update_layer_and_restart(None)
 
     def _on_database_relation_broken(self, _) -> None:
-        self._database_info_loader()
         self._update_layer_and_restart(None)
 
 

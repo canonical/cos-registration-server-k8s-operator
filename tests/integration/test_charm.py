@@ -133,6 +133,7 @@ def test_blackbox_devices(juju):
 def test_integrate_self_signed_certificates(juju):
 
     data = get_relation_application_data(juju, APP_UNIT, APP_CERTIFICATES, SSC_UNIT, SSC_CERTIFICATES)
+    # expected to be empty since certificates are stored as secrets
     assert data == []
 
 

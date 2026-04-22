@@ -236,7 +236,7 @@ def app_fixture(
         lambda status: jubilant.all_active(
             status, PROMETHEUS_APP, POSTGRESQL_APP, BLACKBOX_APP, SSC_APP, app_name
         ),
-        timeout=15*60,
+        timeout=15 * 60,
     )
 
     # grafana_agent_app is

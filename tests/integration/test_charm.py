@@ -118,7 +118,9 @@ def test_tracing(juju):
 
 def test_blackbox(juju):
     """Test probes are defined in relation data bag."""
-    data = get_relation_application_data(juju, BLACKBOX_UNIT, BLACKBOX_PROBES, APP_UNIT, APP_PROBES)
+    data = get_relation_application_data(
+        juju, BLACKBOX_UNIT, BLACKBOX_PROBES, APP_UNIT, APP_PROBES
+    )
     assert "cos-registration-server-k8s/api/v1/health/" in data[0]["scrape_probes"]
 
 
@@ -132,7 +134,9 @@ def test_blackbox_devices(juju):
 
 def test_integrate_self_signed_certificates(juju):
 
-    data = get_relation_application_data(juju, APP_UNIT, APP_CERTIFICATES, SSC_UNIT, SSC_CERTIFICATES)
+    data = get_relation_application_data(
+        juju, APP_UNIT, APP_CERTIFICATES, SSC_UNIT, SSC_CERTIFICATES
+    )
     # expected to be empty since certificates are stored as secrets
     assert data == []
 

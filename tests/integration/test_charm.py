@@ -29,7 +29,7 @@ from tests.integration.constants import (
     SSC_APP,
     SSC_CERTIFICATES,
 )
-from tests.integration.juju import relation_application_data
+from tests.integration.juju import get_relation_application_data
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ def test_deploy(cos_registration_server: str, juju):
 
 def test_alert_rules_devices(juju):
     """Test if devices alert rules are defined in relation."""
-    data = relation_application_data(
+    data = get_relation_application_data(
         juju,
         GRAFANA_AGENT_UNIT,
         GRAFANA_AGENT_LOGGING_PROVIDER,
@@ -84,7 +84,7 @@ def test_alert_rules_devices(juju):
 
 def test_grafana_dashboards_devices(juju):
     """Test if devices dashboards are defined in relation."""
-    data = relation_application_data(
+    data = get_relation_application_data(
         juju,
         GRAFANA_AGENT_UNIT,
         GRAFANA_AGENT_GRAFANA_DASHBOARD,
@@ -97,7 +97,7 @@ def test_grafana_dashboards_devices(juju):
 def test_prometheus_alert_rules_devices(juju):
     """Test if devices alert rules are defined in relation."""
     # migrate from prometheus to grafana_agent
-    data = relation_application_data(
+    data = get_relation_application_data(
         juju,
         PROMETHEUS_UNIT,
         PROMETHEUS_RECEIVE_REMOTE_WRITE,
@@ -110,7 +110,7 @@ def test_prometheus_alert_rules_devices(juju):
 
 def test_tracing(juju):
     """Test logging is defined in relation data bag."""
-    data = relation_application_data(
+    data = get_relation_application_data(
         juju, APP_UNIT, APP_TRACING, GRAFANA_AGENT_UNIT, GRAFANA_AGENT_TRACING_ENDPOINT
     )
     assert data
@@ -118,13 +118,13 @@ def test_tracing(juju):
 
 def test_blackbox(juju):
     """Test probes are defined in relation data bag."""
-    data = relation_application_data(juju, BLACKBOX_UNIT, BLACKBOX_PROBES, APP_UNIT, APP_PROBES)
+    data = get_relation_application_data(juju, BLACKBOX_UNIT, BLACKBOX_PROBES, APP_UNIT, APP_PROBES)
     assert "cos-registration-server-k8s/api/v1/health/" in data[0]["scrape_probes"]
 
 
 def test_blackbox_devices(juju):
     """Test devices probes are defined in relation data bag."""
-    data = relation_application_data(
+    data = get_relation_application_data(
         juju, BLACKBOX_UNIT, BLACKBOX_PROBES, APP_UNIT, APP_PROBES_DEVICES
     )
     assert data[0]["scrape_probes"]
@@ -132,12 +132,12 @@ def test_blackbox_devices(juju):
 
 def test_integrate_self_signed_certificates(juju):
 
-    data = relation_application_data(juju, APP_UNIT, APP_CERTIFICATES, SSC_UNIT, SSC_CERTIFICATES)
+    data = get_relation_application_data(juju, APP_UNIT, APP_CERTIFICATES, SSC_UNIT, SSC_CERTIFICATES)
     assert data == []
 
 
 def test_postgresql(juju):
-    data = relation_application_data(
+    data = get_relation_application_data(
         juju, APP_UNIT, APP_DATABASE, POSTGRESQL_UNIT, POSTGRESQL_DATABASE
     )
     database = data[0]["data"]

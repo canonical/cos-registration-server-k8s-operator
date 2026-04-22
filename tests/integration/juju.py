@@ -19,7 +19,7 @@ def show_unit(juju: jubilant.Juju, unit: str) -> dict:
     return data
 
 
-def relation_application_data(
+def get_relation_application_data(
     juju: jubilant.Juju,
     unit: str,
     endpoint: str,

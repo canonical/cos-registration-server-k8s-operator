@@ -96,7 +96,7 @@ def test_grafana_dashboards_devices(juju):
 
 def test_prometheus_alert_rules_devices(juju):
     """Test if devices alert rules are defined in relation."""
-    # migrate from prometheus to grafana_agent
+    # TODO: migrate from prometheus to grafana_agent
     data = get_relation_application_data(
         juju,
         PROMETHEUS_UNIT,

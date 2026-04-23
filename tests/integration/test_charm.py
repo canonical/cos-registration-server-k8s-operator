@@ -3,350 +3,149 @@
 # See LICENSE file for licensing details.
 
 import logging
-from pathlib import Path
 
-import pytest
-import yaml
-from charmed_kubeflow_chisme.testing import (
+import jubilant
+
+from tests.integration.constants import (
+    APP_CERTIFICATES,
+    APP_DATABASE,
+    APP_GRAFANA_DASHBOARD_DEVICES,
+    APP_LOKI_ALERT_RULE_FILES_DEVICES,
+    APP_NAME,
+    APP_PROBES,
+    APP_PROBES_DEVICES,
+    APP_PROMETHEUS_ALERT_RULE_FILES_DEVICES,
+    APP_TRACING,
+    BLACKBOX_APP,
+    BLACKBOX_PROBES,
     GRAFANA_AGENT_APP,
     GRAFANA_AGENT_GRAFANA_DASHBOARD,
     GRAFANA_AGENT_LOGGING_PROVIDER,
-    assert_grafana_dashboards,
-    assert_logging,
-    deploy_and_assert_grafana_agent,
-    get_grafana_dashboards,
+    GRAFANA_AGENT_TRACING_ENDPOINT,
+    POSTGRESQL_APP,
+    POSTGRESQL_DATABASE,
+    PROMETHEUS_APP,
+    PROMETHEUS_RECEIVE_REMOTE_WRITE,
+    SSC_APP,
+    SSC_CERTIFICATES,
 )
-from charmed_kubeflow_chisme.testing import (
-    get_alert_rules as get_alert_rule_from_files,
-)
-from charmed_kubeflow_chisme.testing.cos_integration import (
-    PROVIDES,
-    REQUIRES,
-    _get_app_relation_data,
-    _get_unit_relation_data,
-)
-from charmed_kubeflow_chisme.testing.cos_integration import (
-    _get_alert_rules as get_alert_rules_from_str,
-)
-from pytest_operator.plugin import OpsTest
+from tests.integration.juju import get_relation_application_data
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
-RESOURCE_NAME = "cos-registration-server-image"
-RESOURCE_PATH = METADATA["resources"][RESOURCE_NAME]["upstream-source"]
-APP_NAME = METADATA["name"]
 
-APP_GRAFANA_DASHBOARD_DEVICES = "grafana-dashboard-devices"
-
-GRAFANA_AGENT_LOGGING_CONSUMER = "logging"
-APP_LOKI_ALERT_RULE_FILES_DEVICES = "logging-alerts-devices"
-APP_PROMETHEUS_ALERT_RULE_FILES_DEVICES = "send-remote-write-alerts-devices"
-
-LOKI_ALERT_RULE_FILES_DIRECTORY_DEVICES = Path("./src/loki_alert_rules/devices")
-PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES = Path("./src/prometheus_alert_rules/devices")
-LOKI_ALERT_RULE_FILE = """groups:
-        - name: example
-          rules:
-          - name: my-group
-            alert: my-alert
-            expr: up == 0
-            for: 5m"""
-PROMETHEUS_ALERT_RULE_FILE = """groups:
-        - name: example
-          rules:
-          - name: my-group
-            alert: my-alert
-            expr: up == 0
-            for: 5m"""
-
-PROMETHEUS_SEND_REMOTE_WRITE = "send-remote-write"
-PROMETHEUS_RECEIVE_REMOTE_WRITE = "receive-remote-write"
-PROMETHEUS_APP = "prometheus-k8s"
-
-POSTGRESQL_APP = "postgresql-k8s"
-POSTGRESQL_APP_CHANNEL = "14/stable"
-
-
-def create_alert_rule_files():
-    """Create alert rule files & directory if it does not exist."""
-    LOKI_ALERT_RULE_FILES_DIRECTORY_DEVICES.mkdir(parents=True, exist_ok=True)
-    PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES.mkdir(parents=True, exist_ok=True)
-    (LOKI_ALERT_RULE_FILES_DIRECTORY_DEVICES / "my_rule.rule").write_text(LOKI_ALERT_RULE_FILE)
-    (PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES / "my_rule.rule").write_text(
-        PROMETHEUS_ALERT_RULE_FILE
+def wait_for_active_idle_without_error(juju: jubilant.Juju, timeout: int = 60 * 45):
+    """Wait for the model to settle without errors."""
+    logger.info(f"waiting for the model ({juju.model}) to settle ...")
+    # grafana_agent_app stays in blocked state by design
+    juju.wait(
+        ready=lambda status: jubilant.all_active(
+            status, APP_NAME, POSTGRESQL_APP, PROMETHEUS_APP, BLACKBOX_APP, SSC_APP
+        ),
+        delay=10,
+        timeout=timeout,
+        error=jubilant.any_error,
+    )
+    logger.info("waiting for agents idle ...")
+    juju.wait(
+        jubilant.all_agents_idle,
+        delay=10,
+        timeout=timeout,
+        error=lambda status: jubilant.any_error(
+            status, APP_NAME, POSTGRESQL_APP, PROMETHEUS_APP, BLACKBOX_APP, SSC_APP
+        ),
     )
 
 
-@pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest):
-    """Build the charm-under-test and deploy it together with related charms.
+APP_UNIT = f"{APP_NAME}/0"
+GRAFANA_AGENT_UNIT = f"{GRAFANA_AGENT_APP}/0"
+PROMETHEUS_UNIT = f"{PROMETHEUS_APP}/0"
+BLACKBOX_UNIT = f"{BLACKBOX_APP}/0"
+SSC_UNIT = f"{SSC_APP}/0"
+POSTGRESQL_UNIT = f"{POSTGRESQL_APP}/0"
 
-    Assert on the unit status before any relations/configurations take place.
-    """
-    create_alert_rule_files()
 
-    # Build and deploy charm from local source folder
-    charm = await ops_test.build_charm(".")
-    resources = {RESOURCE_NAME: RESOURCE_PATH}
+def test_deploy(cos_registration_server: str, juju):
+    """Assert the deployment reaches active status."""
+    wait_for_active_idle_without_error(juju)
 
-    # Deploy the charm
-    await ops_test.model.deploy(charm, resources=resources, application_name=APP_NAME)
-    # Deploy prometheus-k8s
-    # We must deploy prometheus since grafana-agent-k8s doesn't receive remote-write
-    await ops_test.model.deploy(PROMETHEUS_APP, channel="1/stable", trust=True)
 
-    # and wait for active/idle status
-    await ops_test.model.wait_for_idle(
-        apps=[PROMETHEUS_APP], status="active", raise_on_blocked=True, timeout=1000
-    )
-
-    # Deploying grafana-agent-k8s and add the logging relation
-    await deploy_and_assert_grafana_agent(
-        ops_test.model, APP_NAME, channel="1/stable", metrics=False, dashboard=True, logging=True
-    )
-    logger.info(
-        "Adding relation: %s:%s and %s:%s",
-        APP_NAME,
-        APP_GRAFANA_DASHBOARD_DEVICES,
-        GRAFANA_AGENT_APP,
-        GRAFANA_AGENT_GRAFANA_DASHBOARD,
-    )
-    await ops_test.model.integrate(
-        f"{APP_NAME}:{APP_GRAFANA_DASHBOARD_DEVICES}",
-        f"{GRAFANA_AGENT_APP}:{GRAFANA_AGENT_GRAFANA_DASHBOARD}",
-    )
-
-    logger.info(
-        "Adding relation: %s:%s and %s:%s",
-        APP_NAME,
-        APP_LOKI_ALERT_RULE_FILES_DEVICES,
-        GRAFANA_AGENT_APP,
+def test_alert_rules_devices(juju):
+    """Test if devices alert rules are defined in relation."""
+    data = get_relation_application_data(
+        juju,
+        GRAFANA_AGENT_UNIT,
         GRAFANA_AGENT_LOGGING_PROVIDER,
+        APP_UNIT,
+        APP_LOKI_ALERT_RULE_FILES_DEVICES,
     )
-    await ops_test.model.integrate(
-        f"{APP_NAME}:{APP_LOKI_ALERT_RULE_FILES_DEVICES}",
-        f"{GRAFANA_AGENT_APP}:{GRAFANA_AGENT_LOGGING_PROVIDER}",
-    )
+    assert "my-alert" in data[0]["alert_rules"]
 
-    logger.info(
-        "Adding relation: %s:%s and %s:%s",
-        APP_NAME,
-        APP_PROMETHEUS_ALERT_RULE_FILES_DEVICES,
-        PROMETHEUS_APP,
+
+def test_grafana_dashboards_devices(juju):
+    """Test if devices dashboards are defined in relation."""
+    data = get_relation_application_data(
+        juju,
+        GRAFANA_AGENT_UNIT,
+        GRAFANA_AGENT_GRAFANA_DASHBOARD,
+        APP_UNIT,
+        APP_GRAFANA_DASHBOARD_DEVICES,
+    )
+    assert "my-dashboard" in data[0]["dashboards"]
+
+
+def test_prometheus_alert_rules_devices(juju):
+    """Test if devices alert rules are defined in relation."""
+    # TODO: migrate from prometheus to grafana_agent
+    data = get_relation_application_data(
+        juju,
+        PROMETHEUS_UNIT,
         PROMETHEUS_RECEIVE_REMOTE_WRITE,
-    )
-    await ops_test.model.integrate(
-        f"{APP_NAME}:{APP_PROMETHEUS_ALERT_RULE_FILES_DEVICES}",
-        f"{PROMETHEUS_APP}:{PROMETHEUS_RECEIVE_REMOTE_WRITE}",
+        APP_UNIT,
+        APP_PROMETHEUS_ALERT_RULE_FILES_DEVICES,
     )
 
-    logger.info(
-        "Adding relation: %s:%s and %s:%s",
-        APP_NAME,
-        "tracing",
-        GRAFANA_AGENT_APP,
-        "tracing-provider",
-    )
-    await ops_test.model.integrate(
-        f"{APP_NAME}:tracing",
-        f"{GRAFANA_AGENT_APP}:tracing-provider",
-    )
-
-    await ops_test.model.deploy(POSTGRESQL_APP, channel=POSTGRESQL_APP_CHANNEL, trust=True)
-    logger.info(
-        "Adding relation: %s:%s and %s:%s",
-        APP_NAME,
-        "database",
-        POSTGRESQL_APP,
-        "database",
-    )
-    await ops_test.model.integrate(
-        f"{APP_NAME}:database",
-        f"{POSTGRESQL_APP}:database",
-    )
-
-    await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=1000)
+    assert "my-alert" in data[0]["alert_rules"]
 
 
-async def test_status(ops_test):
-    """Assert on the unit status."""
-    assert ops_test.model.applications[APP_NAME].units[0].workload_status == "active"
-
-
-async def test_logging(ops_test: OpsTest):
+def test_tracing(juju):
     """Test logging is defined in relation data bag."""
-    app = ops_test.model.applications[APP_NAME]
-    await assert_logging(app)
-
-
-async def test_grafana_dashboards(ops_test: OpsTest):
-    """Test Grafana dashboards are defined in relation data bag."""
-    app = ops_test.model.applications[APP_NAME]
-    dashboards = get_grafana_dashboards()
-    logger.info("found dashboards: %s", dashboards)
-    await assert_grafana_dashboards(app, dashboards)
-
-
-async def test_grafana_dashboards_devices(ops_test: OpsTest, mocker):
-    """Test Grafana dashboards are defined in relation data bag."""
-    app = ops_test.model.applications[APP_NAME]
-    # @todo get dashboard 'from db'
-    dashboards = set()
-    logger.info("found dashboards: %s", dashboards)
-    mocker.patch(
-        "charmed_kubeflow_chisme.testing.cos_integration.APP_GRAFANA_DASHBOARD",
-        "grafana-dashboard-devices",
+    data = get_relation_application_data(
+        juju, APP_UNIT, APP_TRACING, GRAFANA_AGENT_UNIT, GRAFANA_AGENT_TRACING_ENDPOINT
     )
-    await assert_grafana_dashboards(app, dashboards)
+    assert data
 
 
-async def test_loki_alert_rules_devices(ops_test: OpsTest):
-    """Test Loki alert rules for devices are defined in relation data bag."""
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=120)
-    app = ops_test.model.applications[APP_NAME]
-    # Get the set of rules that should have been pre-loaded
-    alert_rules = get_alert_rule_from_files(LOKI_ALERT_RULE_FILES_DIRECTORY_DEVICES)
-    logger.info("found alert rules: %s", alert_rules)
-    # Get the dict of rules that has been received
-    relation_data = await _get_app_relation_data(
-        app, APP_LOKI_ALERT_RULE_FILES_DEVICES, side=REQUIRES
-    )
-    assert (
-        "alert_rules" in relation_data
-    ), f"{APP_LOKI_ALERT_RULE_FILES_DEVICES} relation is missing 'alert_rules'"  # fmt: skip
-
-    relation_alert_rules = get_alert_rules_from_str(relation_data["alert_rules"])
-    assert relation_alert_rules == alert_rules
-
-
-async def test_prometheus_alert_rules_devices(ops_test: OpsTest):
-    """Test Loki alert rules for devices are defined in relation data bag."""
-    async with ops_test.fast_forward():
-        await ops_test.model.wait_for_idle(apps=[APP_NAME], status="active", timeout=120)
-    app = ops_test.model.applications[APP_NAME]
-    alert_rules = get_alert_rule_from_files(PROMETHEUS_ALERT_RULE_FILES_DIRECTORY_DEVICES)
-    logger.info("found alert rules: %s", alert_rules)
-    relation_data = await _get_app_relation_data(
-        app, APP_PROMETHEUS_ALERT_RULE_FILES_DEVICES, side=REQUIRES
-    )
-
-    relation_alert_rules = get_alert_rules_from_str(relation_data["alert_rules"])
-    assert relation_alert_rules == alert_rules
-
-
-async def test_tracing(ops_test: OpsTest):
-    """Test logging is defined in relation data bag."""
-    app = ops_test.model.applications[APP_NAME]
-
-    unit_relation_data = await _get_unit_relation_data(app, "tracing", side=PROVIDES)
-
-    assert unit_relation_data
-
-
-async def test_integrate_blackbox(ops_test: OpsTest):
-    # @todo: upgrade to stable when blackbox charm with probes relation
-    # is promoted from edge.
-    await ops_test.model.deploy("blackbox-exporter-k8s", "blackbox", channel="1/edge", trust=True)
-
-    logger.info(
-        "Adding relation: %s:%s",
-        APP_NAME,
-        "probes",
-    )
-
-    await ops_test.model.integrate(
-        f"{APP_NAME}:probes",
-        "blackbox:probes",
-    )
-
-    await ops_test.model.wait_for_idle(
-        apps=[
-            f"{APP_NAME}",
-            "blackbox",
-        ],
-        status="active",
-    )
-
-
-async def test_blackbox(ops_test: OpsTest):
+def test_blackbox(juju):
     """Test probes are defined in relation data bag."""
-    app = ops_test.model.applications[APP_NAME]
-
-    relation_data = await _get_app_relation_data(app, "probes", side=PROVIDES)
-
-    assert relation_data.get("scrape_metadata")
-    assert relation_data.get("scrape_probes")
-
-
-async def test_integrate_blackbox_devices(ops_test: OpsTest):
-    logger.info(
-        "Adding relation: %s:%s",
-        APP_NAME,
-        "probes-devices",
+    data = get_relation_application_data(
+        juju, BLACKBOX_UNIT, BLACKBOX_PROBES, APP_UNIT, APP_PROBES
     )
+    assert "cos-registration-server-k8s/api/v1/health/" in data[0]["scrape_probes"]
 
-    await ops_test.model.integrate(
-        f"{APP_NAME}:probes-devices",
-        "blackbox:probes",
+
+def test_blackbox_devices(juju):
+    """Test devices probes are defined in relation data bag."""
+    data = get_relation_application_data(
+        juju, BLACKBOX_UNIT, BLACKBOX_PROBES, APP_UNIT, APP_PROBES_DEVICES
     )
+    assert data[0]["scrape_probes"]
 
-    await ops_test.model.wait_for_idle(
-        apps=[
-            f"{APP_NAME}",
-            "blackbox",
-        ],
-        status="active",
+
+def test_integrate_self_signed_certificates(juju):
+
+    data = get_relation_application_data(
+        juju, APP_UNIT, APP_CERTIFICATES, SSC_UNIT, SSC_CERTIFICATES
     )
+    # expected to be empty since certificates are stored as secrets
+    assert data == []
 
 
-async def test_blackbox_devices(ops_test: OpsTest):
-    """Test probes devices are defined in relation data bag."""
-    app = ops_test.model.applications[APP_NAME]
-
-    relation_data = await _get_app_relation_data(app, "probes-devices", side=PROVIDES)
-
-    # no devices registered when testing
-    assert relation_data.get("scrape_probes")
-
-
-async def test_integrate_self_signed_certificates(ops_test: OpsTest):
-    await ops_test.model.deploy(
-        "self-signed-certificates", "self-signed-certificates", channel="1/stable", trust=True
+def test_postgresql(juju):
+    data = get_relation_application_data(
+        juju, APP_UNIT, APP_DATABASE, POSTGRESQL_UNIT, POSTGRESQL_DATABASE
     )
-
-    logger.info(
-        "Adding relation: %s:%s",
-        APP_NAME,
-        "certificates",
-    )
-
-    await ops_test.model.integrate(
-        f"{APP_NAME}:certificates",
-        "self-signed-certificates:certificates",
-    )
-
-    await ops_test.model.wait_for_idle(
-        apps=[
-            f"{APP_NAME}",
-            "self-signed-certificates",
-        ],
-        status="active",
-    )
-
-
-async def test_postgresql(ops_test: OpsTest):
-    """Test that the postgresql URL is integrated."""
-    app = ops_test.model.applications[APP_NAME]
-    database_app = ops_test.model.applications[POSTGRESQL_APP]
-
-    relation_data = await _get_app_relation_data(app, "database", side=REQUIRES)
-    database_relation_data = await _get_app_relation_data(database_app, "database", side=PROVIDES)
-
-    # Ensure PostgreSQL relation data contains required fields
-    assert relation_data.get("database")
-    assert database_relation_data.get("endpoints")
-    requested_secrets = relation_data.get("requested-secrets")
-    assert "username" in requested_secrets
-    assert "password" in requested_secrets
+    database = data[0]["data"]
+    assert "requested-secrets" in database
+    assert "username" in database
+    assert "password" in database

@@ -11,6 +11,10 @@ on:
       - main
       - track/**
 
+permissions:
+  contents: write
+  pull-requests: read
+
 jobs:
   release:
     uses: canonical/observability/.github/workflows/charm-release.yaml@v0

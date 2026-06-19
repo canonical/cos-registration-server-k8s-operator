@@ -12,8 +12,10 @@ on:
       - track/**
 
 permissions:
+  actions: read
   contents: write
-  pull-requests: read
+  issues: write
+  security-events: write
 
 jobs:
   release:

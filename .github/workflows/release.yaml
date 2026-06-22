@@ -11,14 +11,13 @@ on:
       - main
       - track/**
 
-permissions:
-  actions: read
-  contents: write
-  issues: write
-  security-events: write
-
 jobs:
   release:
+    permissions:
+      actions: read
+      contents: write
+      issues: write
+      security-events: write
     uses: canonical/observability/.github/workflows/charm-release.yaml@v0
     with:
       juju-channel: "3.6/stable"

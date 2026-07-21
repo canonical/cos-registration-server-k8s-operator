@@ -56,6 +56,11 @@ jobs:
 
   pull-request:
     name: PR
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      security-events: write
     uses: canonical/observability/.github/workflows/charm-pull-request.yaml@v0
     secrets: inherit
     with:

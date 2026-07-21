@@ -61,7 +61,7 @@ jobs:
       contents: read
       issues: write
       security-events: write
-    uses: canonical/observability/.github/workflows/charm-pull-request.yaml@v0
+    uses: canonical/observability/.github/workflows/charm-pull-request.yaml@v2
     secrets: inherit
     with:
       charmcraft-channel: latest/stable
